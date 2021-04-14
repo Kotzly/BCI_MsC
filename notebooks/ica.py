@@ -1,6 +1,7 @@
 import mne
 from jade import jade, JadeICA
 from coroica import UwedgeICA, CoroICA
+from abc import ABC, abstractmethod
 
 def _get_kwargs(m, is_extended=False):
     if is_extended:
@@ -18,6 +19,9 @@ _ica_kwargs_dict = {
 }
 
 def create_gdf_obj(arr):
+    if isinstance(arr, mne.io.Raw):
+        return arr
+
     n_channels = arr.shape[1]
     info = mne.create_info(
         ch_names=["C" + str(x+1) for x in range(n_channels)],
@@ -26,96 +30,67 @@ def create_gdf_obj(arr):
     )
     return mne.io.RawArray(arr.T, info)
 
-class ICABase():
+class ICABase(ABC):
 
-    def __init__(self, n_components=None, method=None)
+    def __init__(self, n_components=None, method=None):
         self.n_components = n_components
         self.method = method
+        self.transformer = None
         self.setup()
 
-    def fit(self, x):
+    def fit(self, x, n_components=None):
         self.transformer.fit(x, n_components=self.n_components)
     
     def transform(self, x):
-        self.transform.transform(x)
+        return self.transformer.transform(x)
     
+    @abstractmethod
     def setup(self):
-        pass
+        raise NotImplementedError
 
 class MNETransformerWrapper():
 
-    def __init__(self, transform):
-        self.transform = transform
+    def __init__(self, transformer):
+        self.transformer = transformer
     
     def fit(self, x, n_components=None):
         gdf_data = create_gdf_obj(x)
-        self.transform.fit(gdf_data, picks="all")
+        self.transformer.fit(gdf_data, picks="all")
     
     def transform(self, x):
         gdf_data = create_gdf_obj(x)
-        sources = self.transform.get_sources(gdf_data).get_data().T
+        sources = self.transformer.get_sources(gdf_data).get_data().T
         return sources
 
 class MNEICA(ICABase):
 
     def setup(self):
-        self.transform = mne.preprocessing.ICA(n_components=self.n_components, verbose=None, **_ica_kwargs_dict[method])
-        self.transform = MNETransformerWrapper(self.transform)
+        self.transformer = mne.preprocessing.ICA(n_components=self.n_components, verbose=0, **_ica_kwargs_dict[self.method])
+        self.transformer = MNETransformerWrapper(self.transformer)
 
-MNE_ICA_LIST = {
-    k: lambda n_components: MNEICA(n_components=n, method=k) for k in _ica_kwargs_dict
-}
-
-
-_coro_kwargs = {
+_coro_kwargs_dict = {
     "sobi": dict(partitionsize=int(10**6), timelags=list(range(1, 101))),
     "choi_var": dict(),
     "choi_vartd": dict(timelags=[1, 2, 3, 4, 5]),
     "choi_td": dict(instantcov=False, timelags=[1, 2, 3, 4, 5]),
-    
+    "coro": dict()
 }
 
 class CoroPackICA(ICABase):
     def setup(self):
-        kwargs = _coro_kwargs[self.method]
-        self.transform = UwedgeICA(n_components=self.n_components, **kwargs)
+        kwargs = _coro_kwargs_dict[self.method]
+        ica_constructor = UwedgeICA if self.method != "coro" else CoroICA
+        self.transformer = ica_constructor(n_components=self.n_components, **kwargs)
 
-def coro_ica(x, n_components=None, method="sobi"):
-    kwargs = _coro_kwargs[method]
-    ica_transform = UwedgeICA(n_components=n_components, **kwargs)
-    ica_transform.fit(x)
-    sources = ica_transform.transform(x)
-    return sources
+    def fit(self, x, n_components=None):
+        self.transformer.fit(x)
 
-def ica_choi_var(x, n_components=None):
-    return coro_ica(x, n_components=n_components, method="choi_var")
+def get_transformers(n_components=None):
+    ica_dict = {}
+    for mne_method in _ica_kwargs_dict:
+        ica_dict[mne_method] = MNEICA(n_components=n_components, method=mne_method)
 
-def ica_choi_vartd(x, n_components=None):
-    return coro_ica(x, n_components=n_components, method="choi_vartd")
+    for coro_method in _coro_kwargs_dict:
+        ica_dict[coro_method] = CoroPackICA(n_components=n_components, method=coro_method)
 
-def ica_choi_td(x, n_components=None):
-    return coro_ica(x, n_components=n_components, method="choi_td")
-
-def ica_sobi(x, n_components=None):
-    return coro_ica(x, n_components=n_components, method="sobi")
-
-def ica_coroica(x, n_components=None):
-    ica_transform = CoroICA()
-    ica_transform.fit(x)
-    #ica_transform.fit(Xtrain, group_index=groups, partition_index=partition)
-    sources = ica_transform.transform(x)
-    return sources
-
-ICA_METHODS = [
-    ica_jade,
-    ica_picard,
-    ica_ext_picard,
-    ica_infomax,
-    ica_ext_infomax,
-    ica_fastica,
-    ica_choi_var,
-    ica_choi_vartd,
-    ica_choi_td,
-    ica_sobi,
-    ica_coroica
-]
+    return ica_dict
