@@ -15,7 +15,9 @@ setuptools.setup(
      long_description=long_description,
      long_description_content_type="text/markdown",
      url="https://github.com/Kotzly/BCI_MsC",
-     packages=setuptools.find_packages(),
+    #  packages=setuptools.find_packages("."),
+     packages=["ica_benchmark"],
+     package_dir={"ica_benchmark": "src"},
      classifiers=[
          "Programming Language :: Python :: 3",
          "Operating System :: OS Independent",
