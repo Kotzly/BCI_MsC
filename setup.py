@@ -7,7 +7,7 @@ with open('requirements.txt') as f:
     required = f.read().splitlines()
 
 setuptools.setup(
-     name='ica_benchmarks',  
+     name='ica_benchmark',  
      version='0.1',
      author="Paulo Augusto Alves Luz Viana",
      author_email="p263889@g.unicamp.br",
@@ -15,9 +15,9 @@ setuptools.setup(
      long_description=long_description,
      long_description_content_type="text/markdown",
      url="https://github.com/Kotzly/BCI_MsC",
-    #  packages=setuptools.find_packages("."),
-     packages=["ica_benchmark"],
-     package_dir={"ica_benchmark": "src"},
+     packages=setuptools.find_packages(),
+    #  packages=["ica_benchmark"],
+    #  package_dir={"ica_benchmark": "src"},
      classifiers=[
          "Programming Language :: Python :: 3",
          "Operating System :: OS Independent",

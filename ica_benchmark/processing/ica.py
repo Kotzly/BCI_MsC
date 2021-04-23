@@ -1,5 +1,5 @@
 import mne
-from jade import jade, JadeICA
+from ica_benchmark.processing.jade import jade, JadeICA
 from coroica import UwedgeICA, CoroICA
 from abc import ABC, abstractmethod
 import warnings
@@ -95,7 +95,7 @@ _coro_kwargs_dict = {
     "coro": dict()
 }
 
-def get_transformers(n_components=None):
+def get_ica_transformers(n_components=None):
     ica_dict = {}
     for mne_method in _ica_kwargs_dict:
         ica_dict[mne_method] = MNEICA(n_components=n_components, method=mne_method)

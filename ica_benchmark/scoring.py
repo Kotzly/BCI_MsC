@@ -72,3 +72,9 @@ def apply_pairwise(arr, func=mutual_information):
             if i0 >= i1: continue
             res_arr.append(func(arr[:, i0], arr[:, i1]))
     return np.array(res_arr).mean()
+
+SCORING_FN_DICT = {
+    "coherence": coherence,
+    "correntropy": correntropy,
+    "mutual_informatio": mutual_information
+}
