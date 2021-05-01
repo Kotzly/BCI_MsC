@@ -5,7 +5,7 @@ from ica_benchmark.dictionary import annotation_encode_dict
 def get_annotations(gdf_obj):
     data = gdf_obj
     sr = data.info["sfreq"]
-    n_samples = data._raw_extras[0]["n_records"]
+    n_samples = data._raw_extras[0]["nsamples"]
 
     onsets = np.trunc(data.annotations.onset * sr).astype(np.uint32, casting="unsafe")
     durations = np.trunc(data.annotations.duration * sr).astype(np.uint32, casting="unsafe")

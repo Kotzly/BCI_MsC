@@ -53,10 +53,10 @@ def parse_info(info_dict):
     parsed_info = {k:v for k, v in info_dict.items() if k in cols}
     return parsed_info
 
-def load_subject_data(root, subject, filepaths=None, return_as_gdf=False):
+def load_subject_data(root, subject, filepaths=None, return_as_gdf=True):
     
     if filepaths is None:
-        filepaths = root.glob("{subject}.\.gdf")
+        filepaths = root.glob("{subject}..gdf")
 
     gdf_all_data =[]
     labels_all_data = []
@@ -82,17 +82,19 @@ def load_subject_data(root, subject, filepaths=None, return_as_gdf=False):
         labels_all_data,
         axis=0
     )
-
+    
     if not return_as_gdf:
-#        gdf_data = gdf_data.get_data().T
         gdf_data = gdf_data._data.T
+        assert len(gdf_data) == len(labels)
+    else:
+        assert len(gdf_data._data.T) == len(labels)
     
     return gdf_data, labels, ch_names, info
 
 def id_from_filepath(filepath):
     return filepath.name[:3]
 
-def load_subjects_data(root, subjects=None, mode=None):
+def load_subjects_data(root, subjects=None, mode=None, return_as_gdf=True):
     data_dict = {}
     if subjects is None:
         subjects = dict()
@@ -116,7 +118,7 @@ def load_subjects_data(root, subjects=None, mode=None):
     for subject_id, filepaths in subjects.items():
     
 #        data_dict[subject_id] =  load_subject_data(root, subject_id, filepaths)
-        gdf, labels, chs, info =  load_subject_data(root, subject_id, filepaths, return_as_gdf=True)
+        gdf, labels, chs, info =  load_subject_data(root, subject_id, filepaths, return_as_gdf=return_as_gdf)
         if chs_ is None:
             chs_ = chs
         else:
