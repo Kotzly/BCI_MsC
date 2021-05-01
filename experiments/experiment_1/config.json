@@ -1,0 +1,6 @@
+{
+    "root": "C:/Users/paull/Documents/GIT/BCI_MsC/notebooks/BCI_Comp_IV_2a/BCICIV_2a_gdf",
+    "n_components": 22,
+    "ica_method": "sobi",
+    "scoring_fn_name": "coherence"
+}

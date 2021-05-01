@@ -1,0 +1,56 @@
+{
+  "dataset_dict": {
+    "test": {
+      "A04": [
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A04E.gdf",
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A04T.gdf"
+      ],
+      "A05": [
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A05E.gdf",
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A05T.gdf"
+      ]
+    },
+    "train": {
+      "A01": [
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A01E.gdf",
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A01T.gdf"
+      ],
+      "A02": [
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A02E.gdf",
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A02T.gdf"
+      ],
+      "A07": [
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A07E.gdf",
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A07T.gdf"
+      ],
+      "A08": [
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A08E.gdf",
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A08T.gdf"
+      ],
+      "A09": [
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A09E.gdf",
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A09T.gdf"
+      ]
+    },
+    "validation": {
+      "A03": [
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A03E.gdf",
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A03T.gdf"
+      ],
+      "A06": [
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A06E.gdf",
+        "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\notebooks\\BCI_Comp_IV_2a\\BCICIV_2a_gdf\\A06T.gdf"
+      ]
+    }
+  },
+  "ica_method": "sobi",
+  "n_components": 22,
+  "root": "C:/Users/paull/Documents/GIT/BCI_MsC/notebooks/BCI_Comp_IV_2a/BCICIV_2a_gdf",
+  "scoring_fn_name": "coherence",
+  "seed": 913756946,
+  "tags": [
+    "experimental",
+    "method:sobi",
+    "n_components:22"
+  ]
+}

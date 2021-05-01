@@ -1,0 +1,74 @@
+{
+  "artifacts": [
+    "results.json"
+  ],
+  "command": "main",
+  "experiment": {
+    "base_dir": "C:\\Users\\paull\\Documents\\GIT\\BCI_MsC\\experiments\\experiment_1",
+    "dependencies": [
+      "ica-benchmark==0.1",
+      "mne==0.22.0",
+      "numpy==1.19.5",
+      "sacred==0.8.2"
+    ],
+    "mainfile": "experiment_1.py",
+    "name": "experiment",
+    "repositories": [
+      {
+        "commit": "7fa05d8a299dc7a005d6bbf3771d1eb391fb6b28",
+        "dirty": true,
+        "url": "https://github.com/Kotzly/BCI_MsC.git"
+      }
+    ],
+    "sources": [
+      [
+        "experiment_1.py",
+        "_sources\\experiment_1_78a6399bc6d83ae3aea6605e5af93926.py"
+      ]
+    ]
+  },
+  "heartbeat": "2021-04-22T13:51:06.977018",
+  "host": {
+    "ENV": {},
+    "cpu": "Unknown",
+    "hostname": "LAPTOP-4CVTC17P",
+    "os": [
+      "Windows",
+      "Windows-10-10.0.19041-SP0"
+    ],
+    "python_version": "3.8.8"
+  },
+  "meta": {
+    "command": "main",
+    "options": {
+      "--beat-interval": null,
+      "--capture": null,
+      "--comment": null,
+      "--debug": false,
+      "--enforce_clean": false,
+      "--file_storage": null,
+      "--force": false,
+      "--help": false,
+      "--loglevel": null,
+      "--mongo_db": null,
+      "--name": null,
+      "--pdb": false,
+      "--print-config": false,
+      "--priority": null,
+      "--queue": false,
+      "--s3": null,
+      "--sql": null,
+      "--tiny_db": null,
+      "--unobserved": false,
+      "COMMAND": null,
+      "UPDATE": [],
+      "help": false,
+      "with": false
+    }
+  },
+  "resources": [],
+  "result": null,
+  "start_time": "2021-04-22T13:30:44.412860",
+  "status": "COMPLETED",
+  "stop_time": "2021-04-22T13:51:00.834909"
+}

@@ -1,0 +1,28 @@
+{
+  "dataset_dict": {
+    "test": [
+      "A04",
+      "A05"
+    ],
+    "train": [
+      "A02",
+      "A07",
+      "A09",
+      "A01"
+    ],
+    "validation": [
+      "A03",
+      "A06"
+    ]
+  },
+  "ica_method": "sobi",
+  "n_components": 22,
+  "root": "C:/Users/paull/Documents/GIT/BCI_MsC/notebooks/BCI_Comp_IV_2a/BCICIV_2a_gdf",
+  "scoring_fn_name": "coherence",
+  "seed": 46419670,
+  "tags": [
+    "experimental",
+    "method:sobi",
+    "n_components:22"
+  ]
+}
