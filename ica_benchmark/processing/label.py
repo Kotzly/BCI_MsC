@@ -2,7 +2,7 @@ import numpy as np
 from ica_benchmark.dictionary import annotation_encode_dict
 
 
-def get_annotations(gdf_obj):
+def get_annotations_from_gdf(gdf_obj):
     data = gdf_obj
     sr = data.info["sfreq"]
     n_samples = data._raw_extras[0]["nsamples"]
@@ -20,3 +20,4 @@ def get_annotations(gdf_obj):
         labels[onset:onset+duration, code] = 1
     
     return labels
+

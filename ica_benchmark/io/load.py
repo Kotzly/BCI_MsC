@@ -1,7 +1,7 @@
 from mne.io import read_raw_gdf
 from pathlib import Path
 import numpy as np
-from ica_benchmark.processing.label import get_annotations
+from ica_benchmark.processing.label import get_annotations_from_gdf
 
 PRELOAD = False
 
@@ -10,7 +10,7 @@ def join_gdfs_to_numpy(gdfs):
     all_labels = []
     for gdf in gdfs:
         all_labels.append(
-            get_annotations(gdf)
+            get_annotations_from_gdf(gdf)
         )
 
     labels = np.concatenate(all_labels, axis=0)
@@ -44,7 +44,7 @@ def load_gdf_file(filepath):
         gdf_data._raw_extras[0]["subject_info"]
     )
     
-    labels = get_annotations(gdf_data)
+    labels = get_annotations_from_gdf(gdf_data)
     
     return gdf_data, labels, ch_names, info
 
@@ -137,7 +137,7 @@ def join_gdfs_to_numpy(gdfs):
     all_labels = []
     for gdf in gdfs:
         all_labels.append(
-            get_annotations(gdf)
+            get_annotations_from_gdf(gdf)
         )
 
     labels = np.concatenate(all_labels, axis=0)
