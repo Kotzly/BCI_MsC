@@ -1,7 +1,8 @@
 from torch.utils.data import IterableDataset, DataLoader, Dataset
 import torch
-from statistics import mode
 import numpy as np
+from ica_benchmark.processing.feature import psd_feature_transform, tfr_feature_transform
+from ica_benchmark.processing.label import label_transform
 
 def with_default(value, default):
     return value if value is not None else default
@@ -11,8 +12,8 @@ class WindowTransformer():
 
     def __init__(
         self,
-        feature_transform_fn,
-        label_transform_fn=mode,
+        feature_transform_fn=psd_feature_transform,
+        label_transform_fn=label_transform,
         window_size=250,
         stride=125,
         iterator_mode=False,
@@ -89,30 +90,6 @@ class WindowTransformer():
             return_items = (item_x, item_y) if with_y else item_x
 
             yield return_items
-
-
-class IterDataset(IterableDataset):
-    def __init__(self, x, y, transformer_instance):
-        super(IterDataset).__init__()
-        self.transformer_instance = transformer_instance
-        self.start = 0
-        assert len(x) == len(y), "Lengths must be equal"
-        self.end = len(y)
-        self.x, self.y = x, y
-        
-    def __iter__(self):
-        worker_info = torch.utils.data.get_worker_info()
-        if worker_info is None:  # single-process data loading, return the full iterator
-            iter_start, iter_end = self.start, self.end
-        else:  # in a worker process
-            # split workload
-            per_worker = int(np.ceil((self.end - self.start) / float(worker_info.num_workers)))
-            worker_id = worker_info.id
-            iter_start = self.start + worker_id * per_worker
-            iter_end = min(iter_start + per_worker, self.end)
-        
-        for x, y in self.transformer_instance.transform(self.x, self.y, start=iter_start, end=iter_end):
-            yield x, y
 
 
 class WindowTransformerDataset(Dataset):

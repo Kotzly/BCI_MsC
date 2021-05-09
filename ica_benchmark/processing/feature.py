@@ -11,7 +11,7 @@ DEFAULT_TRF_KWARGS = dict(
     time_bandwidth=4,
     decim=1,
     output='power',
-    n_jobs=1,
+    n_jobs=4,
 )
 
 DEFAULT_PSD_KWARGS = dict(
@@ -22,14 +22,27 @@ DEFAULT_PSD_KWARGS = dict(
     verbose=0,
 )
 
-def label_transform(x):
-    l = x[:, [3, 4, 5, 6, 7]]
-    l[:, -1] = (l[:, :4].max(axis=1) == 1).astype(np.uint32)
-    label = mode(l.argmax(1))
-    return label
+def psd_multitaper(
+    arr,
+    **mne_kwargs
+    ):
 
-def psd_feature_transform(x, freqs=DEFAULT_FREQUENCIES, bandwidth=3):
-    psd, psd_freqs = psd_multitaper(x)
+    if not mne_kwargs:
+        mne_kwargs = DEFAULT_PSD_KWARGS
+
+    psd, freqs = psd_array_multitaper(
+        arr.T,
+        **mne_kwargs
+    )
+    psd = np.expand_dims(psd.T, axis=0)
+
+    return psd, freqs
+
+
+def psd_feature_transform(x, freqs=DEFAULT_FREQUENCIES, bandwidth=3, mne_kwargs=None):
+    if mne_kwargs is None:
+        mne_kwargs = DEFAULT_PSD_KWARGS
+    psd, psd_freqs = psd_multitaper(x, **mne_kwargs)
     feature_vector = list()
     for freq in freqs:
         top_freq = freq + bandwidth / 2
@@ -41,14 +54,14 @@ def psd_feature_transform(x, freqs=DEFAULT_FREQUENCIES, bandwidth=3):
     features = np.concatenate(feature_vector, axis=0).flatten()
     return features
         
-def feature_transform(x):
-    kwargs = DEFAULT_TRF_KWARGS.copy()
-    kwargs.update(dict(n_cycles=3, n_jobs=4))
+def tfr_feature_transform(x, mne_kwargs=None):
+    if mne_kwargs is None:
+        mne_kwargs = DEFAULT_TRF_KWARGS
     return tfr_multitaper(
         x,
         epochs_mode=False,
         feature_format=None,
-        **kwargs
+        **mne_kwargs
     )
 
 def tfr_multitaper(
@@ -97,19 +110,3 @@ def tfr_multitaper(
     tfr_psd = tfr_psd.squeeze() if n_epochs == 1 else tfr_psd
     
     return tfr_psd
-
-def psd_multitaper(
-    arr,
-    **mne_kwargs
-    ):
-
-    if not mne_kwargs:
-        mne_kwargs = DEFAULT_PSD_KWARGS
-
-    psd, freqs = psd_array_multitaper(
-        arr.T,
-        **mne_kwargs
-    )
-    psd = np.expand_dims(psd.T, axis=0)
-
-    return psd, freqs

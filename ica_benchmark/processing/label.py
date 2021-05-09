@@ -1,6 +1,6 @@
 import numpy as np
 from ica_benchmark.dictionary import annotation_encode_dict
-
+from statistics import mode
 
 def get_annotations_from_gdf(gdf_obj):
     data = gdf_obj
@@ -21,3 +21,9 @@ def get_annotations_from_gdf(gdf_obj):
     
     return labels
 
+def label_transform(x):
+    l = x[:, [3, 4, 5, 6]]
+    label = mode(l.argmax(axis=1))
+    sparse_label = np.zeros(l.shape[1])
+    sparse_label[label] = 1
+    return sparse_label
