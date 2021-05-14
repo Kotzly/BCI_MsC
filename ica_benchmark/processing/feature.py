@@ -12,6 +12,7 @@ DEFAULT_TRF_KWARGS = dict(
     decim=1,
     output='power',
     n_jobs=4,
+    verbose="CRITICAL",
 )
 
 DEFAULT_PSD_KWARGS = dict(
@@ -19,7 +20,8 @@ DEFAULT_PSD_KWARGS = dict(
     fmin=0,
     fmax=np.inf,
     bandwidth=None,
-    verbose=0,
+    n_jobs=4,
+    verbose="CRITICAL",
 )
 
 def psd_multitaper(

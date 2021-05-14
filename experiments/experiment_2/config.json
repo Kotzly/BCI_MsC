@@ -1,6 +1,5 @@
 {
     "root": "/home/paulo/Documents/datasets/BCI_Comp_IV_2a/gdf",
-    "n_components": 22,
     "ica_method": "sobi",
-    "scoring_fn_name": "coherence"
+    "n_components": null
 }

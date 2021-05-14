@@ -95,6 +95,7 @@ def id_from_filepath(filepath):
     return filepath.name[:3]
 
 def load_subjects_data(root, subjects=None, mode=None, return_as_gdf=True):
+    root = Path(root)
     data_dict = {}
     if subjects is None:
         subjects = dict()
@@ -108,17 +109,18 @@ def load_subjects_data(root, subjects=None, mode=None, return_as_gdf=True):
         for filepath in filepaths:
             subject_id = id_from_filepath(filepath)
             if subject_id in subjects:
-                subjects[subject_id].append(filepath)
+                subjects[subject_id].append(filepath.name)
             else:
-                subjects[subject_id] = [filepath]
+                subjects[subject_id] = [filepath.name]
 
         subjects[subject_id] = sorted(subjects[subject_id])
 
+
     chs_ = None
-    for subject_id, filepaths in subjects.items():
-    
+    for subject_id, filenames in subjects.items():
 #        data_dict[subject_id] =  load_subject_data(root, subject_id, filepaths)
-        gdf, labels, chs, info =  load_subject_data(root, subject_id, filepaths, return_as_gdf=return_as_gdf)
+        filepaths = [root / filename for filename in filenames]
+        gdf, labels, chs, info =  load_subject_data(root, subject_id, filepaths=filepaths, return_as_gdf=return_as_gdf)
         if chs_ is None:
             chs_ = chs
         else:
@@ -132,30 +134,7 @@ def load_subjects_data(root, subjects=None, mode=None, return_as_gdf=True):
     
     return data_dict
 
-def join_gdfs_to_numpy(gdfs):
-    
-    all_labels = []
-    for gdf in gdfs:
-        all_labels.append(
-            get_annotations_from_gdf(gdf)
-        )
-
-    labels = np.concatenate(all_labels, axis=0)
-    gdf_base = gdfs[0].copy()
-    for gdf in gdfs[1:]:
-        gdf_base._data = np.concatenate(
-            [
-                gdf_base._data,
-                gdf._data
-            ],
-            axis=1
-        )
-    
-    data = gdf_base._data.T
-    
-    return data, labels
-
-def load_dataset(dataset, mode=None):
+def load_dataset(root, dataset, mode=None):
     dataset_dict = dict()
     for dataset_name in dataset:
         dataset_dict[dataset_name] = load_subjects_data(root, dataset[dataset_name], mode=None)

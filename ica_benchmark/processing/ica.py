@@ -61,8 +61,9 @@ class MNEICA(ICABase):
     def setup(self):
         #self.transformer = mne.preprocessing.ICA(n_components=self.n_components, verbose=0, **_ica_kwargs_dict[self.method])
         self.transformer = mne.preprocessing.ICA(
-            n_components=None,
-            n_pca_components=self.n_components,
+            n_components=self.n_components,
+            #n_components=None,
+            #n_pca_components=self.n_components,
             verbose=0,
             **_ica_kwargs_dict[self.method]
         )

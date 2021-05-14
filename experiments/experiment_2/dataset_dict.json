@@ -2,43 +2,34 @@
     "dataset_dict": {
         "train": {
             "A01": [
-                "A01E.gdf",
                 "A01T.gdf"
             ],
             "A02": [
-                "A02E.gdf",
                 "A02T.gdf"
             ],
             "A07": [
-                "A07E.gdf",
                 "A07T.gdf"
             ],
             "A09": [
-                "A09E.gdf",
                 "A09T.gdf"
             ],
             "A08": [
-                "A08E.gdf",
                 "A08T.gdf"
             ]   
         },    
         "validation": {
             "A03": [
-                "A03E.gdf",
                 "A03T.gdf"
             ],
             "A06": [
-                "A06E.gdf",
                 "A06T.gdf"
             ]        
         },
         "test": {
             "A04": [
-                "A04E.gdf",
                 "A04T.gdf"
             ],
             "A05": [
-                "A05E.gdf",
                 "A05T.gdf"
             ]
         }

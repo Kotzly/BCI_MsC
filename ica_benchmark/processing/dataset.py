@@ -2,7 +2,7 @@ from torch.utils.data import IterableDataset, DataLoader, Dataset
 import torch
 import numpy as np
 from ica_benchmark.processing.feature import psd_feature_transform, tfr_feature_transform
-from ica_benchmark.processing.label import label_transform
+from ica_benchmark.processing.label import softmax_label_transform, sigmoid_label_transform
 
 def with_default(value, default):
     return value if value is not None else default
@@ -13,7 +13,7 @@ class WindowTransformer():
     def __init__(
         self,
         feature_transform_fn=psd_feature_transform,
-        label_transform_fn=label_transform,
+        label_transform_fn=sigmoid_label_transform,
         window_size=250,
         stride=125,
         iterator_mode=False,
@@ -99,7 +99,7 @@ class WindowTransformerDataset(Dataset):
         X,
         Y,
         feature_transform_fn=psd_feature_transform,
-        label_transform_fn=label_transform,
+        label_transform_fn=sigmoid_label_transform,
         window_size=500,
         stride=250,
         start=None,
