@@ -70,10 +70,29 @@ def tfr_multitaper(
     arr,
     epochs_mode=False,
     feature_format=None,
-    cut_size=None,
     **mne_kwargs
 ):
+    """
+    Extract the Multitaper Time-Frequency spectogram of an array.
     
+    Parameters
+    ----------
+    arr : np.ndarray
+        An (n_times, n_channels) shaped array of EEG data. If epochs_mode is True, the shape must be (n_epochs, n_times, n_channels).
+    feature_format : 
+    epochs_mode : bool
+        Whether the input array has the epochs dimension.
+    **mne_kwargs
+        Other keyword arguments that will be passed to mne.time_frequency.tfr_array_multitaper
+    
+    Returns
+    -------
+    tfr_psd : np.ndarray
+        The Time-frequency spectogram of `arr`.
+        If feature_format is True, the shape is (n_epochs, n_times, n_chans * n_freqs).
+        If feature_format is False, the shape is (n_epochs, n_times, n_chans, n_freqs).
+
+    """
     if not mne_kwargs:
         mne_kwargs = DEFAULT_TRF_KWARGS
     
@@ -98,7 +117,6 @@ def tfr_multitaper(
         return tfr_psd
     
     n_epochs, n_chans, n_freqs, n_times = tfr_psd.shape
-    cut_size = n_times if cut_size is None else cut_size
     if feature_format:
         #(n_epochs, n_chans, n_freqs, n_times) -> (size, features)
         tfr_psd = tfr_psd\
@@ -107,8 +125,7 @@ def tfr_multitaper(
             
     else:
         tfr_psd = tfr_psd.transpose(0, 3, 1, 2)[:, :, :, -n_times:]
-    
         
-    tfr_psd = tfr_psd.squeeze() if n_epochs == 1 else tfr_psd
+    tfr_psd = tfr_psd.squeeze() if (n_epochs == 1) else tfr_psd
     
     return tfr_psd

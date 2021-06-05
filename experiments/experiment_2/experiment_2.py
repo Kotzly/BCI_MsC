@@ -13,6 +13,8 @@ from ica_benchmark.processing.feature import psd_feature_transform
 from ica_benchmark.processing.label import softmax_label_transform, sigmoid_label_transform
 from ica_benchmark.io.load import load_subjects_data
 
+from sklearn.preprocessing import RobustScaler
+
 from sacred.observers import MongoObserver, FileStorageObserver
 from sacred import Experiment
 
@@ -25,7 +27,7 @@ import torch
 import json
 
 from functools import partial
-from sklearn.metrics import balanced_accuracy_score
+from sklearn.metrics import balanced_accuracy_score, cohen_kappa_score, precision_score, recall_score, roc_auc_score
 
 
 ex = Experiment("experiment")
@@ -55,24 +57,12 @@ class SimpleModel(Module):
     def build(self):
         
         self.model = nn.Sequential(
+            nn.BatchNorm1d(self.feature_size),
             nn.Linear(
                 self.feature_size,
-                100
-            ),
-            nn.ReLU(),
-            nn.Linear(
-                100,
-                50
-            ),
-            nn.ReLU(),
-            nn.Linear(
-                50,
                 self.n_classes
             ),
-            #nn.Softmax(dim=1)
-            
-            # Using sigmoid because there can be a label with 0,0,0,0
-            nn.Sigmoid(),
+            nn.Softmax(dim=1)
         ) 
     
     def forward(self, x):
@@ -89,6 +79,34 @@ def dataset_to_np(data):
     )
     return arr, labels
 
+def eval_dataset(m, loader, run=None, epoch=None, name="D"):
+    y_t = []
+    y_p = []
+    for x, y in loader:
+        y_p_value = m(x.float().cuda()).cpu().detach().numpy()
+        y_p.append(y_p_value)
+        y_t.append(y.cpu().detach().numpy())
+
+    y_p_multi = np.concatenate(y_p, axis=0)
+    y_t_multi = np.concatenate(y_t, axis=0)
+    y_p = y_p_multi.argmax(axis=1)
+    y_t = y_t_multi.argmax(axis=1)
+
+    
+    b_acc = balanced_accuracy_score(y_t, y_p)
+    kappa = cohen_kappa_score(y_t, y_p)
+    precision = precision_score(y_t, y_p, average="macro")
+    recall = recall_score(y_t, y_p, average="macro")
+    auc = roc_auc_score(y_t_multi, y_p_multi, multi_class="ovr")
+    
+    run.log_scalar(f"{name}_balanced_accuracy", b_acc, epoch)
+    run.log_scalar(f"{name}_precision", precision, epoch)
+    run.log_scalar(f"{name}_kappa", kappa, epoch)
+    run.log_scalar(f"{name}_recall", recall, epoch)
+    run.log_scalar(f"{name}_auc", auc, epoch)
+
+    return kappa
+
 def run_experiment(_run, root, dataset_dict, ica_method, n_components):
 
     dataset_data_dict = {}
@@ -98,7 +116,6 @@ def run_experiment(_run, root, dataset_dict, ica_method, n_components):
         data = load_subjects_data(root, subjects=dataset_dict[fold], mode="both")
         dataset_data_dict[fold] = dataset_to_np(data)
     
-
     ######## RIGHT
     x_train, y_train = dataset_data_dict["train"]
     x_val, y_val = dataset_data_dict["validation"]
@@ -114,13 +131,17 @@ def run_experiment(_run, root, dataset_dict, ica_method, n_components):
     ########
     print(x_train.shape, y_train.shape)
 
-    ica_transform = get_ica_transformers(n_components=n_components)[ica_method]
+    ica_transform = get_ica_transformers(method=ica_method, n_components=n_components)
     ica_transform.fit(x_train)
 
     x_train = ica_transform.transform(x_train)
     x_val = ica_transform.transform(x_val)
     x_test = ica_transform.transform(x_test)
 
+    scaler = RobustScaler()
+    x_train = scaler.fit_transform(x_train)
+    x_val = scaler.transform(x_val)
+    x_test = scaler.transform(x_test)
     #############################################################################
 
     freqs = np.array([4, 7, 10, 13, 16, 19, 21])
@@ -130,8 +151,7 @@ def run_experiment(_run, root, dataset_dict, ica_method, n_components):
 
     dataset_kwargs = dict(
         feature_transform_fn=feature_transform,
-#        label_transform_fn=softmax_label_transform,
-        label_transform_fn=sigmoid_label_transform,
+        label_transform_fn=softmax_label_transform,
         window_size=250,
         stride=125
     )
@@ -155,26 +175,15 @@ def run_experiment(_run, root, dataset_dict, ica_method, n_components):
     test_dataloader = DataLoader(dataset, **dataloader_kwargs)
 
 
-    model = SimpleModel(n_features, 4).cuda()
+    model = SimpleModel(n_features, 5).cuda()
     optimizer = Adam(model.parameters(), lr=1e-5, weight_decay=1e-6)
-    loss_fn = nn.BCELoss()
-
-
-    def eval_dataset(m, loader):
-        acc_arr = []
-        for x, y in loader:
-            y_p = m(x.float().cuda()).cpu().detach().numpy()
-            acc = balanced_accuracy_score(y.argmax(axis=1), y_p.argmax(axis=1))
-            acc_arr.append(acc)
-        return np.mean(acc_arr)
+    loss_fn = nn.BCELoss()        
     
-    batch_i = 0
-    best_acc = 0
+    best_metric = 0
     patience = 0
     for epoch in range(30):
         epoch_losses = []
         for x, y in train_dataloader:
-            batch_i += 1
             x = x.float().cuda()
             y = y.float().cuda()
             y_p = model(x)
@@ -186,21 +195,22 @@ def run_experiment(_run, root, dataset_dict, ica_method, n_components):
             epoch_losses.append(batch_loss)
         epoch_loss = np.mean(epoch_losses)
 
-        val_acc = eval_dataset(model, val_dataloader)
-        _run.log_scalar("val_acc", val_acc, epoch)
+        val_metric = eval_dataset(model, val_dataloader, run=_run, epoch=epoch, name="val")
         _run.log_scalar("train_loss", epoch_loss, epoch)
 
-        print(f"{epoch}: {epoch_loss:.4f} / {val_acc:.4f}")
+        print(f"{epoch}: {epoch_loss:.4f} / {val_metric:.4f}")
 
-        if val_acc >= (best_acc + 0.001):
-            best_acc = val_acc
+        if val_metric >= (best_metric + 0.001):
+            best_metric = val_metric
             patience = 0
         elif epoch >= 5:
             patience += 1
         
         if patience == 3:
             break
-    
+
+    eval_dataset(model, test_dataloader, run=_run, epoch=epoch, name="test")
+
 @ex.automain
 def main(
     _run,

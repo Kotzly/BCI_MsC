@@ -96,12 +96,12 @@ _coro_kwargs_dict = {
     "coro": dict()
 }
 
-def get_ica_transformers(n_components=None):
-    ica_dict = {}
-    for mne_method in _ica_kwargs_dict:
-        ica_dict[mne_method] = MNEICA(n_components=n_components, method=mne_method)
+def get_ica_transformers(method="sobi", n_components=None):
 
-    for coro_method in _coro_kwargs_dict:
-        ica_dict[coro_method] = CoroPackICA(n_components=n_components, method=coro_method)
-
-    return ica_dict
+    if method in _ica_kwargs_dict:
+        return MNEICA(n_components=n_components, method=method)
+    elif method in _coro_kwargs_dict:
+        return CoroPackICA(n_components=n_components, method=method)
+    else:
+        raise Exception("Method {} not found.".format(method))
+        
