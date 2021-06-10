@@ -76,17 +76,6 @@ class SimpleModel(Module):
     def forward(self, x):
         return self.model(x)
 
-def dataset_to_np(data):
-    arr = np.concatenate(
-        [data[sub]["gdf"]._data.T for sub in data],
-        axis=0
-    )
-    labels = np.concatenate(
-        [data[sub]["labels"] for sub in data],
-        axis=0
-    )
-    return arr, labels
-
 
 def extract(filepaths, ica=None, fit_ica=True):
     if ica is None:
@@ -119,16 +108,20 @@ def extract(filepaths, ica=None, fit_ica=True):
         ica.fit(ica_vec)
 
     transformed = ica.transform(ica_vec)
+    transformed = ica_vec
+
     transformed = transformed.T.reshape(n_channels, -1, n_times).transpose(1, 0, 2)
     
     features, freqs = psd_array_multitaper(transformed, 250., fmin=0, fmax=20, bandwidth=2)
-    print(features.shape)
 
     n_epochs, _, _ = features.shape
 #    features = features.reshape(n_epochs, -1)
     features = features.mean(axis=2)
     labels_placeholder = np.zeros((len(labels), 4))
-    labels_placeholder[:, labels] = 1
+
+    for i, l in enumerate(labels):
+        labels_placeholder[i, l] = 1
+
     labels = labels_placeholder
     return features, labels, ica
 
@@ -158,7 +151,6 @@ def run_experiment(_run):
     x_train, y_train, ica = extract(train_filepaths, fit_ica=True)
     x_val, y_val, _ = extract(val_filepaths, ica=ica, fit_ica=False)
     x_test, y_test, _ = extract(test_filepaths, ica=ica, fit_ica=False)
-    print(x_train.shape, x_val.shape, x_test.shape)
 
     scaler = RobustScaler()
 
@@ -167,13 +159,21 @@ def run_experiment(_run):
     val_dataloader = list(zip(x_val, y_val))
     test_dataloader = list(zip(x_test, y_test))
 
+    datasets_sizes = {
+        "train": len(train_dataloader),
+        "val": len(val_dataloader),
+        "test": len(test_dataloader),
+    }
+
+    print(datasets_sizes)
+    
     model = SimpleModel(x_train.shape[1], 4).cuda()
     loss_fn = nn.BCELoss()
-    optimizer = Adam(model.parameters(), lr=1e-5, weight_decay=1e-6)
+    optimizer = Adam(model.parameters(), lr=1e-4)
 #    optimizer = RAdam(model.parameters(), lr=0.0001, weight_decay=1e-6)
 
     dataloader_kwargs = dict(
-        batch_size=32,
+        batch_size=16,
         shuffle=True,
         num_workers=4, 
         drop_last=True,
@@ -186,14 +186,16 @@ def run_experiment(_run):
         "test": DataLoader(test_dataloader, **dataloader_kwargs),
     }
     losses = dict(train=list(), val=list())
+    accuracies = dict(train=list(), val=list())
     
     best_model_sd = model.state_dict()
-    best_loss = 1000
+    best_metric = 10
     patience = 0
-    max_patience = 20
+    max_patience = 50
     for epoch in range(1000):
         for phase in "train", "val":
             epoch_losses = []
+            corrects = 0
             for x, y in dataloaders[phase]:
                 if phase == "train":
                     model.train()
@@ -207,19 +209,23 @@ def run_experiment(_run):
                     loss.backward()
                     optimizer.step()
                 
+                corrects += torch.sum(y_p.argmax(axis=1) == y.argmax(axis=1)).item()
+
                 batch_loss = loss.item()
                 epoch_losses.append(batch_loss)
             
             epoch_loss = np.mean(epoch_losses)
             losses[phase].append(epoch_loss)
+            accuracies[phase].append(corrects / datasets_sizes[phase])
             _run.log_scalar(f"{phase}_loss", epoch_loss, epoch)
+            _run.log_scalar(f"{phase}_acc", corrects / datasets_sizes[phase], epoch)
 
         
         print("{}: {:.4f} / {:.4f}".format(epoch, losses["train"][-1], losses["val"][-1]))
 
         if epoch > 1:
-            if losses["val"][-1] < best_loss:
-                best_loss = losses["val"][-1]
+            if losses["val"][-1] < best_metric:
+                best_metric = losses["val"][-1]
                 best_model_sd = copy.deepcopy(model.state_dict())
                 patience = 0
             else:
@@ -228,7 +234,7 @@ def run_experiment(_run):
         if patience >= max_patience:
             break
 
-    print("Loading model with loss", best_loss)
+    print("Loading model with loss", best_metric)
     model.load_state_dict(best_model_sd)
 
     acc = 0
