@@ -1,0 +1,37 @@
+{
+    "dataset_dict": {
+        "train": {
+            "A01": [
+                "A01T.gdf"
+            ],
+            "A02": [
+                "A02T.gdf"
+            ],
+            "A07": [
+                "A07T.gdf"
+            ],
+            "A09": [
+                "A09T.gdf"
+            ],
+            "A08": [
+                "A08T.gdf"
+            ]   
+        },    
+        "validation": {
+            "A03": [
+                "A03T.gdf"
+            ],
+            "A06": [
+                "A06T.gdf"
+            ]        
+        },
+        "test": {
+            "A04": [
+                "A04T.gdf"
+            ],
+            "A05": [
+                "A05T.gdf"
+            ]
+        }
+    }
+}

@@ -1,0 +1,5 @@
+{
+    "root": "/home/paulo/Documents/datasets/BCI_Comp_IV_2a/gdf",
+    "ica_method": "sobi",
+    "n_components": null
+}

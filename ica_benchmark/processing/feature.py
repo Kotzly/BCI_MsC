@@ -93,9 +93,10 @@ def tfr_multitaper(
         If feature_format is False, the shape is (n_epochs, n_times, n_chans, n_freqs).
 
     """
-    if not mne_kwargs:
-        mne_kwargs = DEFAULT_TRF_KWARGS
-    
+    temp_mne_kwargs = DEFAULT_TRF_KWARGS.copy()
+    temp_mne_kwargs.update(mne_kwargs)
+    mne_kwargs = temp_mne_kwargs
+
     # arr is (n_times, n_channels)
     if not epochs_mode:
         assert arr.ndim == 2, "The input array must be of shape (n_times, n_channels)"
