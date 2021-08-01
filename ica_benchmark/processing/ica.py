@@ -25,6 +25,32 @@ def _get_kwargs(m, is_extended=False):
     return dict(method=m)
 
 
+_ica_kwargs_dict = {
+    "fastica": _get_kwargs("fastica"),
+    "infomax": _get_kwargs("infomax"),
+    "picard": _get_kwargs("picard"),
+    "ext_infomax": _get_kwargs("infomax", is_extended=True),
+    "ext_picard": _get_kwargs("picard", is_extended=True),
+}
+
+
+_coro_kwargs_dict = {
+    "sobi": dict(partitionsize=int(10 ** 6), timelags=list(range(1, 101))),
+    "choi_var": dict(),
+    "choi_vartd": dict(timelags=[1, 2, 3, 4, 5]),
+    "choi_td": dict(instantcov=False, timelags=[1, 2, 3, 4, 5]),
+    "coro": dict(),
+}
+
+
+_jade_kwargs_dict = {"jade": dict()}
+
+
+_all_methods = (
+    list(_ica_kwargs_dict) + list(_coro_kwargs_dict) + list(_jade_kwargs_dict)
+)
+
+
 def create_gdf_obj(arr):
     if isinstance(arr, mne.io.Raw):
         return arr
@@ -147,9 +173,9 @@ class CustomICA(ICA):
         elif self.method in _jade_kwargs_dict:
             kwargs = _jade_kwargs_dict[self.method]
             jade_ica = JadeICA(self.n_components, **kwargs)
-            jade_ica.fit(data[:, sel])
+            jade_ica.fit(data[:, sel].T)
             self.unmixing_matrix_ = jade_ica.B
-            self.n_iter_ = jade_ica.n_iter
+            self.n_iter_ = jade_ica.n_iter + 1
 
         assert self.unmixing_matrix_.shape == (self.n_components_,) * 2
         norms = self.pca_explained_variance_
@@ -176,31 +202,19 @@ class CustomICA(ICA):
 SAMPLING_FREQ = 250.0
 
 
-_ica_kwargs_dict = {
-    "fastica": _get_kwargs("fastica"),
-    "infomax": _get_kwargs("infomax"),
-    "picard": _get_kwargs("picard"),
-    "ext_infomax": _get_kwargs("infomax", is_extended=True),
-    "ext_picard": _get_kwargs("picard", is_extended=True),
-}
-
-
-_coro_kwargs_dict = {
-    "sobi": dict(partitionsize=int(10 ** 6), timelags=list(range(1, 101))),
-    "choi_var": dict(),
-    "choi_vartd": dict(timelags=[1, 2, 3, 4, 5]),
-    "choi_td": dict(instantcov=False, timelags=[1, 2, 3, 4, 5]),
-    "coro": dict(),
-}
-
-
-_jade_kwargs_dict = {"jade": dict()}
-
-
-_all_methods = (
-    list(_ica_kwargs_dict) + list(_coro_kwargs_dict) + list(_jade_kwargs_dict)
-)
-
-
 def get_all_methods():
     return _all_methods
+
+
+def get_ica_instance(method, n_components=None, **kwargs):
+    if method in _ica_kwargs_dict:
+        return CustomICA(n_components=n_components, **_ica_kwargs_dict[method], **kwargs)
+    return CustomICA(n_components, method=method, **kwargs)
+
+
+mne.preprocessing.ica._KNOWN_ICA_METHODS = list(
+    set(
+        mne.preprocessing.ica._KNOWN_ICA_METHODS
+    ) | 
+    set(get_all_methods())
+)

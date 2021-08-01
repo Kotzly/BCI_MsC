@@ -95,6 +95,8 @@ def apply_pairwise(arr, func=mutual_information):
 
 SCORING_FN_DICT = {
     "coherence": coherence,
-    "correntropy": correntropy,
+    "correntropy_05": lambda x, y: correntropy(x, y, sigma=.5),
+    "correntropy_1": correntropy,
+    "correntropy_2": lambda x, y: correntropy(x, y, sigma=2.),
     "mutual_informatio": mutual_information,
 }
