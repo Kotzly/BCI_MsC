@@ -1,4 +1,3 @@
-
 annotation_desc_dict = {
     276: "Idling EEG (eyes open)",
     277: "Idling EEG (eyes closed)",
