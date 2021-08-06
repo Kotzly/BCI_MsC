@@ -3,7 +3,7 @@ from scipy.stats import chi2_contingency
 import numpy as np
 from scipy.signal import coherence as coherence_
 from multiprocessing import Pool
-
+from itertools import combinations
 
 def square(x):
     return x ** 2
@@ -83,14 +83,27 @@ def apply_pairwise_parallel(arr, func=mutual_information):
 
 
 def apply_pairwise(arr, func=mutual_information):
-    n = arr.shape[1]
-    res_arr = []
-    for i0 in range(n):
-        for i1 in range(n):
-            if i0 >= i1:
-                continue
-            res_arr.append(func(arr[:, i0], arr[:, i1]))
-    return np.array(res_arr).mean()
+    n = arr.shape[0]
+    scores = list()
+    for i1, i2 in combinations(range(n), 2):
+        scores.append(
+            func(arr[:, i1], arr[:, i2])
+        )
+    return np.array(scores).mean()
+
+
+def promethee(metrics, w=None):
+    final_score = 0
+    n_rows, n_cols = metrics.shape
+    if w is None:
+        w = np.ones(n_cols)
+    for c in range(n_cols):
+        metric_col = metrics[:, [c]]
+        score = (metric_col > metric_col.T).astype(int)
+        final_score += score * w[c]
+    
+    final_score = final_score.sum(axis=1)
+    return final_score / (n_cols * n_rows)
 
 
 SCORING_FN_DICT = {
