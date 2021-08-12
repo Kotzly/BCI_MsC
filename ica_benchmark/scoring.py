@@ -1,19 +1,17 @@
 import numpy as np
 from scipy.stats import chi2_contingency
-import numpy as np
 from scipy.signal import coherence as coherence_
 from multiprocessing import Pool
 from itertools import combinations
-
-def square(x):
-    return x ** 2
-
+from functools import partial
 
 # def calc_MI(x, y, bins):
 #     c_xy = np.histogram2d(x, y, bins)[0]
 #     g, p, dof, expected = chi2_contingency(c_xy, lambda_="log-likelihood")
 #     mi = 0.5 * g / c_xy.sum()
 #     return mi
+
+N_JOBS = 3
 
 
 def mutual_information(X, Y, bins=100):
@@ -67,16 +65,13 @@ def apply_fn(args):
 
 
 def apply_pairwise_parallel(arr, func=mutual_information):
-    n = arr.shape[1]
+    n = arr.shape[0]
     res_arr = []
     args = []
-    for i0 in range(n):
-        for i1 in range(n):
-            if i0 >= i1:
-                continue
-            args.append((arr[:, i0], arr[:, i1], func))
+    for i1, i2 in combinations(range(n), 2):
+        args.append((arr[i1, :], arr[i2, :], func))
 
-    with Pool(3) as pool:
+    with Pool(N_JOBS) as pool:
         res_arr = pool.map(apply_fn, args)
 
     return np.array(res_arr).mean()
@@ -87,7 +82,7 @@ def apply_pairwise(arr, func=mutual_information):
     scores = list()
     for i1, i2 in combinations(range(n), 2):
         scores.append(
-            func(arr[:, i1], arr[:, i2])
+            func(arr[i1, :], arr[i2, :])
         )
     return np.array(scores).mean()
 
@@ -108,8 +103,8 @@ def promethee(metrics, w=None):
 
 SCORING_FN_DICT = {
     "coherence": coherence,
-    "correntropy_05": lambda x, y: correntropy(x, y, sigma=.5),
+    "correntropy_05": partial(correntropy, sigma=.5),
     "correntropy_1": correntropy,
-    "correntropy_2": lambda x, y: correntropy(x, y, sigma=2.),
+    "correntropy_2": partial(correntropy, sigma=2.),
     "mutual_informatio": mutual_information,
 }
