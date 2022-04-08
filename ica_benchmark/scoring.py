@@ -1,15 +1,9 @@
 import numpy as np
-from scipy.stats import chi2_contingency
 from scipy.signal import coherence as coherence_
 from multiprocessing import Pool
 from itertools import combinations
 from functools import partial
 
-# def calc_MI(x, y, bins):
-#     c_xy = np.histogram2d(x, y, bins)[0]
-#     g, p, dof, expected = chi2_contingency(c_xy, lambda_="log-likelihood")
-#     mi = 0.5 * g / c_xy.sum()
-#     return mi
 
 N_JOBS = 3
 
@@ -106,5 +100,5 @@ SCORING_FN_DICT = {
     "correntropy_05": partial(correntropy, sigma=.5),
     "correntropy_1": correntropy,
     "correntropy_2": partial(correntropy, sigma=2.),
-    "mutual_informatio": mutual_information,
+    "mutual_information": mutual_information,
 }

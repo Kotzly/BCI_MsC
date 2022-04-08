@@ -35,11 +35,11 @@ _ica_kwargs_dict = {
 
 
 _coro_kwargs_dict = {
-    "sobi": dict(partitionsize=int(10 ** 6), timelags=list(range(1, 101))),
+    "sobi": dict(partitionsize=int(10 ** 6), timelags=list(range(1, 101))),  # [TODO] resolve nan issue
     "choi_var": dict(),
-    "choi_vartd": dict(timelags=[1, 2, 3, 4, 5]),
-    "choi_td": dict(instantcov=False, timelags=[1, 2, 3, 4, 5]),
-    "coro": dict(),
+    "choi_vartd": dict(timelags=[1, 2, 3, 4, 5]),  # [TODO] resolve nan issue 
+    "choi_td": dict(instantcov=False, timelags=[1, 2, 3, 4, 5]),  # [TODO] resolve nan issue
+    "coro": dict(),  # [TODO] resolve nan issue
 }
 
 

@@ -34,7 +34,12 @@ ex.observers.append(
 filepaths = list(Path("/home/paulo/Documents/datasets/BCI_Comp_IV_2a/gdf").glob("*T.gdf"))
 
 
-def run_ica_experiment(_run):
+ICA_N_COMPONENTS = 12
+CSP_N_COMPONENTS = 8
+
+
+@ex.capture
+def run_ica_experiment(_run, method_idx):
 
     # filepaths = Path(r"C:\Users\paull\Documents\GIT\BCI_MsC\notebooks\BCI_Comp_IV_2a\BCICIV_2a_gdf/").glob("*T.gdf")
 
@@ -47,11 +52,17 @@ def run_ica_experiment(_run):
         tmin=-1.,
         tmax=3.
     )
+
+    all_methods = get_all_methods()
+    methods = all_methods if method_idx is None else [all_methods[method_idx]]
+    name = "" if method_idx is None else "_{}".format(all_methods[method_idx])
+    print("Using methods", methods)
+
     results = dict()
-    for method in get_all_methods():
+    for method in methods:
         print("Running for method", method)
         clf = make_pipeline(
-            CSP(n_components=12),
+            CSP(n_components=CSP_N_COMPONENTS),
             Vectorizer(),
             MinMaxScaler(),
             LogisticRegression(
@@ -62,8 +73,11 @@ def run_ica_experiment(_run):
         results[method] = list()
         for i, (epochs, mdata) in enumerate(zip(dataset, metadata)):
             print("\t", i, mdata["id"])
-            ICA = get_ica_instance(method)
+            ICA = get_ica_instance(method, n_components=ICA_N_COMPONENTS)
             start = time.time()
+
+            epochs = epochs.copy().load_data().filter(l_freq=None, h_freq=40).resample(90.)
+
             transformed_epochs = ICA.fit(epochs).get_sources(epochs)
             duration = time.time() - start
 
@@ -74,7 +88,23 @@ def run_ica_experiment(_run):
                 scores[fn_name] = score
 
             X, Y = transformed_epochs.get_data(), transformed_epochs.events[:, 2]
-            clf.fit(X, Y)
+
+            del epochs, transformed_epochs
+
+            try:
+                clf.fit(X, Y)
+            except Exception:
+                print("\t\tFailed during fit")
+                results[method].append(
+                    {
+                        "id": mdata["id"],
+                        "score": None,
+                        "bas": None,
+                        "duration": duration
+                    }
+                )
+                continue
+
             pred = clf.predict(X)
             bas = balanced_accuracy_score(Y, pred)
             results[method].append(
@@ -86,10 +116,16 @@ def run_ica_experiment(_run):
                 }
             )
 
-    with open("./results.json", "w") as json_file:
+    results_filepath = f"./results{name}.json"
+    with open(results_filepath, "w") as json_file:
         json.dump(results, json_file, indent=4)
 
-    _run.add_artifact("./results.json", content_type="json")
+    _run.add_artifact(results_filepath, content_type="json")
+
+
+@ex.config
+def cfg():
+    method_idx = None
 
 
 @ex.automain

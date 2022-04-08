@@ -20,6 +20,8 @@ class BCI_IV_Comp_Dataset():
         "772": 3
     }
 
+    EOG_CHANNELS = ["EOG-left", "EOG-central", "EOG-right"]
+
     REJECT_MAGNITUDE = 1e-4
 
     SUBJECT_INFO_KEYS = [
@@ -39,23 +41,23 @@ class BCI_IV_Comp_Dataset():
         pass
 
     @classmethod
-    def load_as_raw(cls, filepath, preload=False):
-        eog_channels = ["EOG-left", "EOG-central", "EOG-right"]
+    def load_as_raw(cls, filepath, load_eog=False, preload=False):
+        
         gdf_obj = read_raw_gdf(
             filepath,
             preload=preload,
-            eog=eog_channels,
-            exclude=eog_channels,
+            eog=cls.EOG_CHANNELS,
+            exclude=None if load_eog else cls.EOG_CHANNELS,
         )
     
         return gdf_obj
 
     @classmethod
-    def load_as_epochs(cls, filepath, tmin=-.3, tmax=.7, reject=None):
+    def load_as_epochs(cls, filepath, tmin=-.3, tmax=.7, reject=None, load_eog=False):
         if reject is None:
             reject = cls.REJECT_MAGNITUDE
 
-        gdf_obj = cls.load_as_raw(filepath, preload=True)
+        gdf_obj = cls.load_as_raw(filepath, preload=True, load_eog=load_eog)
         events, _ = events_from_annotations(gdf_obj, event_id=cls.EVENT_MAP_DICT)
         epochs = Epochs(
             gdf_obj,
@@ -64,7 +66,9 @@ class BCI_IV_Comp_Dataset():
             reject_by_annotation=True,
             tmin=tmin,
             tmax=tmax,
-            reject=dict(eeg=reject)
+            reject=dict(eeg=reject),
+            baseline=None,
+            # proj=False
         )
         return epochs
 
