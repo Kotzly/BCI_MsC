@@ -1,16 +1,22 @@
 from torch.utils.data import IterableDataset, DataLoader, Dataset
 import torch
 import numpy as np
-from ica_benchmark.processing.feature import psd_feature_transform, tfr_feature_transform
-from ica_benchmark.processing.label import softmax_label_transform, sigmoid_label_transform
+from ica_benchmark.processing.feature import (
+    psd_feature_transform,
+    tfr_feature_transform,
+)
+from ica_benchmark.processing.label import (
+    softmax_label_transform,
+    sigmoid_label_transform,
+)
 import multiprocessing as mp
+
 
 def with_default(value, default):
     return value if value is not None else default
 
 
-class WindowTransformer():
-
+class WindowTransformer:
     def __init__(
         self,
         feature_transform_fn=psd_feature_transform,
@@ -18,7 +24,7 @@ class WindowTransformer():
         window_size=250,
         stride=125,
         iterator_mode=False,
-        ):
+    ):
 
         self.feature_transform_fn = feature_transform_fn
         self.label_transform_fn = label_transform_fn
@@ -27,7 +33,7 @@ class WindowTransformer():
         self.iterator_mode = iterator_mode
 
     def transform(self, x, y=None, start=None, end=None):
-        
+
         size = len(x)
         start, end = with_default(start, 0), with_default(end, size)
 
@@ -40,7 +46,7 @@ class WindowTransformer():
             return self._transform_list(x, y=y, start=start, end=end)
 
     def _transform_list(self, x, y=None, start=None, end=None):
-        
+
         with_y = y is not None
 
         output_x, output_y = list(), list()
@@ -60,7 +66,7 @@ class WindowTransformer():
 
             output_x.append(item_x)
             output_y.append(item_y)
-        
+
         output_x = np.concatenate(output_x, axis=0)
 
         if with_y:
@@ -69,9 +75,9 @@ class WindowTransformer():
         return (output_x, output_y) if with_y else output_x
 
     def _transform_iter(self, x, y=None, start=None, end=None):
-        
+
         with_y = y is not None
-        
+
         if y is not None:
             assert len(x) == len(y), "X and Y must have same sizes"
 
@@ -94,7 +100,6 @@ class WindowTransformer():
 
 
 class WindowTransformerDataset(Dataset):
-
     def __init__(
         self,
         X,
@@ -104,27 +109,27 @@ class WindowTransformerDataset(Dataset):
         window_size=500,
         stride=250,
         start=None,
-        end=None
-        ):
+        end=None,
+    ):
         super(WindowTransformerDataset).__init__()
 
         self.feature_transform_fn = feature_transform_fn
         self.label_transform_fn = label_transform_fn
         self.window_size = window_size
         self.stride = stride
-        
+
         assert len(X) == len(Y), "X and Y must have same sizes."
         assert len(X) >= window_size, "Window size must be smaller than the array size."
         self.X, self.Y = X, Y
-        
+
         self.start = with_default(start, 0)
         self.end = with_default(end, len(X))
-        
+
     def __len__(self):
         return (len(self.X) - self.window_size) // self.stride - 2
-    
+
     def __getitem__(self, i):
-        
+
         idx = i * self.stride
 
         x = self.feature_transform_fn(self.X[idx : idx + self.window_size])
@@ -136,8 +141,8 @@ class WindowTransformerDataset(Dataset):
         for i in range(len(self)):
             yield self[i]
 
-class WindowTransformerStaticDataset(Dataset):
 
+class WindowTransformerStaticDataset(Dataset):
     def __init__(
         self,
         X,
@@ -147,8 +152,8 @@ class WindowTransformerStaticDataset(Dataset):
         window_size=500,
         stride=250,
         start=None,
-        end=None
-        ):
+        end=None,
+    ):
         super(WindowTransformerStaticDataset).__init__()
 
         self.feature_transform_fn = feature_transform_fn
@@ -156,14 +161,14 @@ class WindowTransformerStaticDataset(Dataset):
         self.window_size = window_size
         self.stride = stride
         self.size = None
-        
+
         assert len(X) == len(Y), "X and Y must have same sizes."
         assert len(X) >= window_size, "Window size must be smaller than the array size."
         self.X, self.Y = X, Y
-        
+
         self.start = with_default(start, 0)
         self.end = with_default(end, len(X))
-        
+
         self._build()
 
     def _extract_features_with_idx(self, i):
@@ -175,7 +180,7 @@ class WindowTransformerStaticDataset(Dataset):
         idx = i * self.stride
         y = self.label_transform_fn(self.Y[idx : idx + self.window_size])
         return y
-        
+
     def _build(self):
         idxs = range(len(self))
         with mp.Pool(4) as pool:
@@ -186,14 +191,23 @@ class WindowTransformerStaticDataset(Dataset):
         self.size = len(self.features)
         allowed = []
         for i in range(len(self)):
-            if len(np.unique(self.Y[i * self.stride:i * self.stride + self.window_size].argmax(axis=1))) == 1:
+            if (
+                len(
+                    np.unique(
+                        self.Y[
+                            i * self.stride : i * self.stride + self.window_size
+                        ].argmax(axis=1)
+                    )
+                )
+                == 1
+            ):
                 allowed.append(True)
             else:
                 allowed.append(False)
         self.features = self.features[allowed]
         self.labels = self.labels[allowed]
         self.size = len(self.features)
-        
+
     def __len__(self):
         if not self.size:
             size = 0
@@ -202,13 +216,12 @@ class WindowTransformerStaticDataset(Dataset):
                 step, size = step + 1, size + 1
             return size - 1
         else:
-            return self.size 
-    
+            return self.size
+
     def __getitem__(self, i):
-        
+
         return self.features[i], self.labels[i]
 
     def __iter__(self):
         for i in range(len(self)):
             yield self[i]
-
