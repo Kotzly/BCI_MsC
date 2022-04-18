@@ -65,6 +65,12 @@ def create_gdf_obj(arr):
 
 
 class CustomICA(ICA):
+
+    def transform(self, X, copy=True):
+        if copy:
+            X = X.copy()
+        return self.get_sources(X)
+
     def _fit(self, data, fit_type):
         """Aux function."""
         random_state = check_random_state(self.random_state)

@@ -1,7 +1,8 @@
 sacred==0.8.2
-mne==0.23.0
+mne==1.0
 coroICA==0.1.25
 numpy==1.20.1
 scipy==1.6.3
 torch==1.8.1
 python-picard==0.4
+sklearn==1.0.2
