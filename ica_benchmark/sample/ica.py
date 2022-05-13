@@ -31,3 +31,28 @@ def sample_ica_data(N=20000, n_electrodes=6, seed=42):
     X += noise
 
     return X, sources, W
+
+
+def sample_sines_data(N=20000, n_electrodes=22, seed=42):
+
+    np.random.seed(seed)
+
+    frequencies = [1, 2, 3, 5, 7, 11, 13, 17, 19, 23]
+    sources = np.concatenate(
+        [
+            np.sin(
+                np.linspace(0, 5 * i * 10, N).reshape(1, N) +
+                np.random.rand() * 2 * np.pi
+            ) / 5
+            for i
+            in frequencies
+        ],
+        axis=0
+    )
+    W = np.random.normal(0, .5, size=(n_electrodes, 10))
+    W += .1 * np.sign(W)
+    X = W @ sources
+    noise = np.random.normal(0, 0.05, size=X.shape)
+    X += noise
+
+    return X, sources, W

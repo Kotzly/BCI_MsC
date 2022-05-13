@@ -17,7 +17,8 @@ class BCI_IV_Comp_Dataset():
         "769": 0,
         "770": 1,
         "771": 2,
-        "772": 3
+        "772": 3,
+#        "768": 4,
     }
 
     UNKNOWN_EVENT_MAP_DICT = {
@@ -51,7 +52,7 @@ class BCI_IV_Comp_Dataset():
             filepath,
             preload=preload,
             eog=cls.EOG_CHANNELS,
-            exclude=None if load_eog else cls.EOG_CHANNELS,
+            exclude=list() if load_eog else cls.EOG_CHANNELS,
         )
     
         return gdf_obj

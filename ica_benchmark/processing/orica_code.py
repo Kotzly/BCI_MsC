@@ -22,8 +22,7 @@ def nonlinearity(x, n_sub=1):
     for i in range(n_sub):
         x[i] = -2 * np.tanh(x[i])
     for i in range(n_sub, n_e):
-        # x[i] = 2 * np.tanh(x[i])
-        x[i] = np.tanh(x[i]) - x[i]
+        x[i] = 2 * np.tanh(x[i])
     return x
 
 
@@ -33,19 +32,15 @@ def matrix_div(a, b):
     return (np.linalg.inv(b.T) @ a.T).T
 
 
-def update_m(x, m, l=.005):
+def update_m(x, m, lambdas=.005):
     # Natural gradient-based recursive least-squares
     # algorithm for adaptive blind source separation
 
     n_ch, n_p = x.shape
     v = m @ x
-    beta = l / (1 - l)
-    # The second part of the sum is equivalent to v.T @ v
-    # In matlab this is done with trace(v.T @ v) / n_p but this way
-    # We avoid a O(n²) matrix multiplication and do a O(n) matrix multp
-    # EDIT: trace solution proved to be a little faster
-    #Q = beta + (v ** 2).sum(axis=0).mean()
-    Q = beta + np.trace(v.T @ v) / n_p
+    l = 1 - lambdas[len(lambdas) // 2]
+
+    Q = l / (1 - l) + np.trace(v.T @ v) / n_p
 
     # Division by n_p to normalize the block-wide v @ v.T multiplication]
     # v @ v.T = sum_{i=0}^{n_p} v[:, [i]] @ v.T[[i], :]
@@ -55,22 +50,9 @@ def update_m(x, m, l=.005):
     return m
 
 
-def update_m_orica(x, m, l=.005):
-    # Online Recursive ICA Algorithm Used for Motor Imagery EEG Signal
-
-    n_ch, n_p = x.shape
-    v = m @ x
-    beta = l / (1 - l)
-
-    Q = 1 + l * (np.trace(v.T @ v) / n_p - 1)
-    I = np.eye(n_ch)
-    m = m + beta * (I - v @ v.T / n_p / Q) @ m
-
-    return m
 
 
-
-def update_w_block(v, w, lambdas=None):
+def update_w_block(v, w, lambdas=None, n_sub=1):
     # Online Recursive ICA Algorithm Used for Motor Imagery EEG Signal
     # https://github.com/goodshawn12/orica/blob/master/orica.m
     n_ch, n_p = v.shape
@@ -82,63 +64,16 @@ def update_w_block(v, w, lambdas=None):
     assert len(lambdas) == n_p
 
     y = w @ v
-    fy = nonlinearity(y)
+    fy = nonlinearity(y, n_sub=n_sub)
 
     lambda_prod = np.product(1 / (1 - lambdas))
-
+    # dot(f, y, 1) = (fy * y).sum(axis=0)
+    Q = 1 + lambdas * ((fy * y).sum(axis=0) - 1)
     I = np.eye(n_ch)
 
-    F = 0
-    for i in range(n_p):
-        beta = (1 - lambdas[i]) / lambdas[i]
-        y_ = y[:, [i]]
-        fy_ = fy[:, [i]]
-        Q = beta + fy_.T @ y_
-        F += y_ @ fy_.T / Q
-
-    w = lambda_prod * (I - F) @ w
+    w = lambda_prod * (w - y @ np.diag(lambdas / Q) @ fy.T @ w)
     w = orthogonalize(w)
     
-    return w
-
-
-def update_w(v, w, l=.995):
-    # Online Recursive ICA Algorithm Used for Motor Imagery EEG Signal
-    # https://github.com/goodshawn12/orica/blob/master/orica.m
-    n_ch, n_p = v.shape
-    y = w @ v
-    fy = nonlinearity(y)
-    # l = min(l, 1 - 1e-8)
-    scalar = l / (1 - l)
-    I = np.eye(n_ch)
-
-#     Q = (1 + l * (fy.T @ y - 1))
-    Q = 1 + l * ((fy * y).sum(axis=0).mean() - 1)
-    inv_iter = I - y @ fy.T / Q
-    w = w + scalar * inv_iter @ w
-
-    w = orthogonalize(w)
-
-    return w
-
-
-def update_w_2(v, w, l=.995):
-    # Independent Component Analysis Using an Extended Infomax
-    # Algorithm for Mixed Subgaussian and Supergaussian Sources
-    n_ch, n_p = v.shape
-
-    y = w @ v
-    fy = nonlinearity(y)
-
-    beta = l / (1 - l)
-#     Q = (beta + v.T @ v) # diagonal(v.T @ v).mean()
-
-    Q = beta + (fy * y).sum(axis=0).mean()
-
-    w = (1 / l) * (w - y @ fy.T @ w / Q)
-
-    w = orthogonalize(w)
-
     return w
 
 
@@ -147,14 +82,14 @@ class ORICA(BaseEstimator):
     SUPPORTED_MODES = (
         "constant",
         # Tracking Non-stationary EEG Sources using Adaptive Online Recursive Independent Component Analysis
-        "adaptative",
-        "adaptative_exp",
+        #"adaptative",
+        #"adaptative_exp",
         # Tracking Non-stationary EEG Sources using Adaptive Online Recursive Independent Component Analysis
         "decay",
-        "pid"
+        #"pid"
     )
 
-    def __init__(self, n_channels=6, size_block=4, block_update=False, stride=1, mode=None, lm_0=None, lw_0=None, gamma=None, adaptative_constants=None, n_passes=1, adap_exp_norm=1e4):
+    def __init__(self, n_channels=6, size_block=4, block_update=False, stride=1, mode=None, lm_0=None, lw_0=None, gamma=None, adaptative_constants=None, n_passes=1, adap_exp_norm=1e4, tau_const=np.inf, n_sub=1):
         self.mode = mode
         self.lm_0 = lm_0
         self.lw_0 = lw_0
@@ -167,6 +102,8 @@ class ORICA(BaseEstimator):
         self.block_update = block_update
         self.stride = stride
         self.Rn = None
+        self.n_sub = n_sub
+        self.tau_const = tau_const
         self.I = np.eye(n_channels)
         self.init()
     
@@ -175,7 +112,7 @@ class ORICA(BaseEstimator):
             self.mode = "constant"
 
         assert self.mode in self.SUPPORTED_MODES
-
+        self.lambda_const = 1-np.exp(-1/(self.tau_const))
         if self.gamma is None:
             self.gamma = 0.6
 
@@ -199,12 +136,12 @@ class ORICA(BaseEstimator):
         # Tracking Non-stationary EEG Sources using Adaptive Online Recursive Independent Component Analysis
         _, size_block = y.shape
         sigmarn = self.adaptative_constants.sigmarn
-        R = y @ nonlinearity(y).T / size_block
+        R = y @ nonlinearity(y, n_sub=self.n_sub).T / size_block
         if self.Rn is None:
-            # code uses(self.I + y @ nonlinearity(y).T / self.size_block
+            # code uses(self.I + y @ nonlinearity(y, n_sub=self.n_sub).T / self.size_block
             self.Rn = self.I - R
         else:
-            # Code in octave uses sigma * (self.I + y @ nonlinearity(y).T / self.size_block)
+            # Code in octave uses sigma * (self.I + y @ nonlinearity(y, n_sub=self.n_sub).T / self.size_block)
             self.Rn = (
                 (1 - sigmarn) * self.Rn +
                 sigmarn * (self.I - R)
@@ -220,7 +157,7 @@ class ORICA(BaseEstimator):
         # Real-time Adaptive EEG Source Separation using Online Recursive Independent Component Analysis
         _, size_block = y.shape
         sigma = np.linalg.norm(
-            y @ nonlinearity(y).T / size_block - self.I,
+            y @ nonlinearity(y, n_sub=self.n_sub).T / size_block - self.I,
             "fro"
         )
         return sigma
@@ -243,17 +180,23 @@ class ORICA(BaseEstimator):
             w = self.w
         y = w @ m @ x
 
+        n_ch, n_p = x.shape
+
         def sigmoid(x):
-            return (1 / (1 + np.exp(-x)))
+            return (1 / (1 + np.exp(- x)))
 
         if self.mode == "constant":
             sigma = self.NSI(y)
-            lm, lw = self.lm_0, self.lw_0
+            lm = np.repeat(self.lm_0, n_p)
+            lw = np.repeat(self.lw_0, n_p)
 
         elif self.mode == "decay":
             sigma = self.NSI(y)
-            div = iteration ** self.gamma
+            div = np.arange(iteration - n_p + 1, iteration + 1) ** self.gamma
             lm, lw = self.lm_0 / div, self.lw_0 / div
+            lm = np.where(lm < self.lambda_const, self.lambda_const, lm)
+            lw = np.where(lw < self.lambda_const, self.lambda_const, lw)
+            
 
         elif self.mode == "adaptative":
             alpha, beta, _ = self.adaptative_constants
@@ -284,32 +227,29 @@ class ORICA(BaseEstimator):
 
     def transform(self, X, warm_start=False):
         X_filtered = X.copy()
-        lm = self.lm_0
-        lw = self.lw_0
+        
+
         if not warm_start:
             self.m = self.m_0
             self.w = self.w_0
         else:
             assert not ((self.w is None) or (self.m is None)), "You need to call transform once"
-        self.lambdas = [lw]
+
+        lm, lw, _ = self.get_lambdas(X, self.size_block, self.m, self.w)
+        self.lambdas = [lw.mean()]
         self.sigmas = list()
         for i in tqdm(range(self.size_block, len(X.T), self.stride)):
-        #for i in range(self.size_block, len(X.T), self.stride):
+            X_i = X[:, i - self.size_block:i]
             for n_pass in range(self.n_passes):
-                X_i = X[:, i - self.size_block: i]
-                self.m = update_m(X[:, i - self.size_block: i], self.m, l=1 - lm)
-                #self.m = update_m_orica(X[:, i - self.size_block: i], self.m, l=1 - lm)
-                if self.block_update:
-                    lambdas_ = [self.lw_0] * (self.size_block - len(self.lambdas)) + self.lambdas[-self.size_block:]
-                    self.w = update_w_block(self.m @ X_i, self.w, lambdas=lambdas_)
-                else:
-                    self.w = update_w(self.m @ X_i, self.w, l=lw)
+
+                self.m = update_m(X_i, self.m, lambdas=lm)
+                self.w = update_w_block(self.m @ X_i, self.w, lambdas=lw)
 
                 y = self.w @ self.m @ X_i
                 X_filtered[:, i - self.size_block:i] = y
 
                 lm, lw, sigma = self.get_lambdas(X_i, i, self.m, self.w)
-                self.lambdas.append(lw)
+                self.lambdas.append(lw.mean())
                 self.sigmas.append(sigma)
         
         return X_filtered
@@ -318,37 +258,30 @@ class ORICA(BaseEstimator):
         X = X.get_data()
         n_epochs, n_channels, n_times = X.shape
         X_filtered = X.copy()
-        lm = self.lm_0
-        lw = self.lw_0
         if not warm_start:
             self.m = self.m_0
             self.w = self.w_0
-        self.lambdas = [lw]
+        lm, lw, _ = self.get_lambdas(X[0], self.size_block, self.m, self.w)
+        self.lambdas = [lw.mean()]
         self.sigmas = list()
-        iter_n = 0
+
         for e in tqdm(range(n_epochs)):
-            for i in tqdm(range(self.size_block, n_times, self.stride), leave=False):
-            #for i in range(self.size_block, len(X.T), self.stride):
+            for i in tqdm(range(self.size_block, n_times + self.stride, self.stride), leave=False):
+                X_i = X[e, :, i - self.size_block:i]
+                n_p = X_i.shape[1]
                 for n_pass in range(self.n_passes):
-                    iter_n += 1
-                    X_i =  X[e, :, i - self.size_block:i]
-                    # l = l_0 / (i - size_block + 1) ** gamma
-                    #self.m = update_m(X[e, :, i - self.size_block: i], self.m, l=1 - lm)
-                    self.m = update_m_orica(X[e, :, i - self.size_block: i], self.m, l=1 - lm)
-                    
-                    if self.block_update:
-                        lambdas_ = [self.lw_0] * (self.size_block - len(self.lambdas)) + self.lambdas[-self.size_block:]
-                        self.w = update_w_block(self.m @ X_i, self.w, lambdas=lambdas_)
-                    else:
-                        self.w = update_w(self.m @ X_i, self.w, l=lw)
+
+                    lm, lw, sigma = self.get_lambdas(X_i, e * n_times + i, self.m, self.w)
+#                    print(e, n_times, e * n_times + i, max(lm), min(lm))
+                    self.m = update_m(X_i, self.m, lambdas=lm[-n_p:])
+                    self.w = update_w_block(self.m @ X_i, self.w, lambdas=lw[-n_p:])
 
                     y = self.w @ self.m @ X_i
                     X_filtered[e, :, i - self.size_block:i] = y
 
-                    lm, lw, sigma = self.get_lambdas(X_i, iter_n, self.m, self.w)
-                    self.lambdas.append(lw)
+                    self.lambdas.append(lw.mean())
                     self.sigmas.append(sigma)
-            
+        
         return X_filtered
 
 
@@ -361,17 +294,13 @@ def plot_various(x, n=6, d=1, figsize=(20, 5), ax=None, show=True, title=""):
     if show:
         plt.show()
 
+
 if __name__ == "__main__":
     from ica_benchmark.sample.ica import sample_ica_data
 
-    X, sources, W = sample_ica_data(N=50000, seed=100)
-    
-    #ica = ORICA(mode="constant", block_update=True, size_block=8, stride=8, lw_0=.0078, lm_0=0.0078)
-    #ica = ORICA(mode="decay", block_update=False, size_block=16, stride=4, gamma=0.6, lm_0=.995, lw_0=.995)
-    #ica = ORICA(mode="adaptative", block_update=True, size_block=8, stride=8, lm_0=.1, lw_0=.1)
-    #ica = ORICA(mode="adaptative_exp", block_update=False, size_block=64, stride=2, adap_exp_norm=1e4)
-    #ica = ORICA(mode="decay", block_update=False, size_block=32, stride=8, gamma=0.6, lm_0=.995, lw_0=.995)
-    ica = ORICA(mode="adaptative", block_update=True, size_block=32, stride=32, lm_0=.1, lw_0=.1)
+    X, sources, W = sample_ica_data(N=1000, seed=100)
+
+    ica = ORICA(mode="decay", block_update=True, size_block=8, stride=8, gamma=0.6, lm_0=.995, lw_0=.995)
     
     ica.fit(X)
     X_filtered = ica.transform(X)
