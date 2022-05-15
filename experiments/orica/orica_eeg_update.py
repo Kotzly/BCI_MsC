@@ -4,7 +4,9 @@ from scipy.stats import pearsonr
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.decomposition import FastICA
-
+import pandas as pd
+from pathlib import Path
+import matplotlib
 
 if __name__ == "__main__":
 
@@ -14,19 +16,19 @@ if __name__ == "__main__":
         "277": 1,
         "1072": 2
     }
-    epochs = BCI_IV_Comp_Dataset.load_as_epochs(filepath, load_eog=True, tmin=4., tmax=60., reject=False).load_data().filter(0.05, 30.)
+    epochs = BCI_IV_Comp_Dataset.load_as_epochs(filepath, load_eog=True, tmin=4., tmax=60., reject=False).load_data().filter(0.5, 30.)
     eeg_epochs = epochs.copy().pick("eeg")
     eog_epochs = epochs.copy().pick("eog")
     eog_data = eog_epochs.get_data()
     print("EEG:", eeg_epochs.get_data().shape)
+    pd.DataFrame(eeg_epochs.get_data().transpose(1, 0, 2).reshape(22, -1)).to_csv("A01T.csv", header=False, index=False)
     #ica = ORICA(mode="adaptative", block_update=True, size_block=8, stride=8, lm_0=.1, lw_0=.1)
     #ica = ORICA(n_channels=22, mode="decay", block_update=False, size_block=32, stride=4, gamma=0.6, lm_0=.995, lw_0=.995)
-    #ica = ORICA(mode="decay", n_channels=22, block_update=True, size_block=4, stride=4, gamma=.8, lm_0=.95, lw_0=.95)
+    # ica = ORICA(mode="decay", n_channels=22, block_update=True, size_block=4, stride=4, gamma=.8, lm_0=.95, lw_0=.95)
     #ica = ORICA(mode="constant", n_channels=22, block_update=True, size_block=16, stride=16, lw_0=.01, lm_0=0.01)
-    ica = ORICA(mode="decay", n_channels=22, block_update=True, size_block=4, stride=4, lm_0=.995, lw_0=.995, gamma=0.6, n_sub=3)
-    eeg_sources_data = ica.transform_epochs(eeg_epochs)
+    ica = ORICA(mode="decay", n_channels=22, block_update=True, size_block=8, stride=8, lm_0=.995, lw_0=.995, gamma=0.6, n_sub=2)
+    eeg_sources_data = ica.transform_epochs(eeg_epochs, scaling=1e6)
     #eeg_sources_data = np.stack([ica.w @ eeg_epoch_data for eeg_epoch_data in eeg_sources_data])
-    
     
     
     print("EOG")

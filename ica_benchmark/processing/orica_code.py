@@ -3,11 +3,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 from collections import namedtuple
+# This solves mpl foor loop memory leak for some reason
+import matplotlib
 
 adaptative_constants = namedtuple("adaptative_constants", ["a", "b", "sigmarn"])
 
 def orthogonalize(w):
-    d, v = np.linalg.eigh(w @ w.T)        
+    d, v = np.linalg.eigh(w @ w.T)
     d = np.diag(d)
 #     w = matrix_div(v, np.sqrt(d)) @ np.linalg.inv(v) @ w
     w = v @ np.sqrt(np.linalg.inv(d)) @ np.linalg.inv(v) @ w
@@ -20,9 +22,10 @@ def nonlinearity(x, n_sub=1):
     x = x.copy()
 
     for i in range(n_sub):
-        x[i] = -2 * np.tanh(x[i])
+        # x[i] = 2 * np.tanh(x[i])
+        x[i] = np.tanh(x[i]) - x[i]
     for i in range(n_sub, n_e):
-        x[i] = 2 * np.tanh(x[i])
+        x[i] = -2 * np.tanh(x[i])
     return x
 
 
@@ -37,7 +40,10 @@ def update_m(x, m, lambdas=.005):
     # algorithm for adaptive blind source separation
 
     n_ch, n_p = x.shape
+    lambdas = lambdas[-n_p:]
     v = m @ x
+    # [TODO] Check if it is possible to no use the median value, and use the full array
+    # i.e. `l = 1 - lambdas`
     l = 1 - lambdas[len(lambdas) // 2]
 
     Q = l / (1 - l) + np.trace(v.T @ v) / n_p
@@ -48,8 +54,6 @@ def update_m(x, m, lambdas=.005):
     #m /= np.linalg.norm(m, "fro")
 
     return m
-
-
 
 
 def update_w_block(v, w, lambdas=None, n_sub=1):
@@ -235,36 +239,38 @@ class ORICA(BaseEstimator):
         else:
             assert not ((self.w is None) or (self.m is None)), "You need to call transform once"
 
-        lm, lw, _ = self.get_lambdas(X, self.size_block, self.m, self.w)
         self.lambdas = [lw.mean()]
         self.sigmas = list()
         for i in tqdm(range(self.size_block, len(X.T), self.stride)):
             X_i = X[:, i - self.size_block:i]
             for n_pass in range(self.n_passes):
 
+                lm, lw, sigma = self.get_lambdas(X_i, i, self.m, self.w)
                 self.m = update_m(X_i, self.m, lambdas=lm)
                 self.w = update_w_block(self.m @ X_i, self.w, lambdas=lw)
 
                 y = self.w @ self.m @ X_i
                 X_filtered[:, i - self.size_block:i] = y
 
-                lm, lw, sigma = self.get_lambdas(X_i, i, self.m, self.w)
                 self.lambdas.append(lw.mean())
                 self.sigmas.append(sigma)
         
         return X_filtered
 
-    def transform_epochs(self, X, warm_start=False):
-        X = X.get_data()
+    def transform_epochs(self, X, warm_start=False, scaling=1):
+        orig_mpl_backend = matplotlib.get_backend()
+        matplotlib.use("agg")
+
+        X = X.get_data() * scaling
+        # X = X / X.transpose(1, 0, 2).reshape(X.shape[1], -1).std(axis=1)[np.newaxis, :, np.newaxis]
         n_epochs, n_channels, n_times = X.shape
         X_filtered = X.copy()
         if not warm_start:
             self.m = self.m_0
             self.w = self.w_0
-        lm, lw, _ = self.get_lambdas(X[0], self.size_block, self.m, self.w)
-        self.lambdas = [lw.mean()]
+        self.lambdas = [self.lw_0]
         self.sigmas = list()
-
+        im_cnt = 0
         for e in tqdm(range(n_epochs)):
             for i in tqdm(range(self.size_block, n_times + self.stride, self.stride), leave=False):
                 X_i = X[e, :, i - self.size_block:i]
@@ -273,15 +279,43 @@ class ORICA(BaseEstimator):
 
                     lm, lw, sigma = self.get_lambdas(X_i, e * n_times + i, self.m, self.w)
 #                    print(e, n_times, e * n_times + i, max(lm), min(lm))
-                    self.m = update_m(X_i, self.m, lambdas=lm[-n_p:])
-                    self.w = update_w_block(self.m @ X_i, self.w, lambdas=lw[-n_p:])
+                    m = update_m(X_i, self.m, lambdas=lm)
+                    w = update_w_block(self.m @ X_i, self.w, lambdas=lw)
+
+                    self.m, self.w = m, w
 
                     y = self.w @ self.m @ X_i
                     X_filtered[e, :, i - self.size_block:i] = y
 
                     self.lambdas.append(lw.mean())
                     self.sigmas.append(sigma)
-        
+                
+                if (i % 100) < self.stride:
+                    fig = plt.figure(figsize=(9, 9))
+                    plt.imshow(self.m)
+                    plt.colorbar()
+                    fig.savefig("./m/img_{}.png".format(str(im_cnt).rjust(5, "0")))
+                    plt.close(fig)
+                    del fig
+                    
+                    fig = plt.figure(figsize=(9, 9))
+                    plt.imshow(self.w)
+                    plt.colorbar()
+                    fig.savefig("./w/img_{}.png".format(str(im_cnt).rjust(5, "0")))
+                    plt.close(fig)
+                    del fig
+
+                    fig = plt.figure(figsize=(9, 9))
+                    plt.imshow(np.corrcoef(self.m @ X_i))
+                    plt.colorbar()
+                    fig.savefig("./c/img_{}.png".format(str(im_cnt).rjust(5, "0")))
+                    plt.close(fig)
+                    del fig
+                    
+                    plt.close("all")
+                    im_cnt += 1
+
+        matplotlib.use(orig_mpl_backend)
         return X_filtered
 
 
