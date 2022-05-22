@@ -14,9 +14,10 @@ if __name__ == "__main__":
         "277": 1,
         "1072": 2
     }
-    epochs = BCI_IV_Comp_Dataset.load_as_epochs(filepath, load_eog=True, tmin=0., tmax=60., reject=False).load_data().filter(.05, 30.)
-    eeg_epochs = epochs.copy().pick("eeg")
-    eog_epochs = epochs.copy().pick("eog")
+    epochs = BCI_IV_Comp_Dataset.load_as_epochs(filepath, load_eog=True, tmin=5., tmax=60., reject=False).load_data()
+    exclude_channels = ["EEG-Fz"]
+    eeg_epochs = epochs.copy().pick("eeg").pick([ch for ch in epochs.ch_names if not ch in exclude_channels])
+    eog_epochs = epochs.copy().pick("eog").pick(["EOG-left", "EOG-right"])
     eog_data = eog_epochs.get_data()
     eeg_data = eeg_epochs.get_data()
     print("EEG:", eeg_epochs.get_data().shape)
@@ -29,9 +30,9 @@ if __name__ == "__main__":
     
     ica_eog = FastICA(3)
     n_epochs, n_channels, n_times = eog_data.shape
-    eog_data = ica_eog.fit_transform(
-        eog_data.transpose(1, 0, 2).reshape(n_channels, -1).T
-    ).T.reshape(n_channels, n_epochs, n_times).transpose(1, 0, 2)
+    # eog_data = ica_eog.fit_transform(
+    #     eog_data.transpose(1, 0, 2).reshape(n_channels, -1).T
+    # ).T.reshape(n_channels, n_epochs, n_times).transpose(1, 0, 2)
 
     n_eeg_channels = eeg_sources_data.shape[1]
     n_eog_channels = eog_data.shape[1]
@@ -40,7 +41,7 @@ if __name__ == "__main__":
     n_epochs = len(eeg_sources_data)
     
     for eeg_channel in range(n_eeg_channels):
-        fig, axes = plt.subplots(3, 1, figsize=(20, 3 * 4))
+        # fig, axes = plt.subplots(3, 1, figsize=(20, 3 * 4))
         for eog_channel in range(n_eog_channels):
             pcc_list = list()
             for epoch in range(n_epochs):
@@ -56,20 +57,24 @@ if __name__ == "__main__":
                 #        pcc
                 #    )
                 #)
-                if np.abs(pcc) > .8:
-                    fig_, ax = plt.subplots(1, 1, figsize=(20, 4))
-                    ax.plot(
-                        eeg_sources_data[epoch, eeg_channel, :],
+                ind = ""
+                if np.abs(pcc) > .7:
+                    fig, axes = plt.subplots(2, 1, figsize=(20, 4))
+                    axes[0].plot(
+                        eeg_sources_data[epoch, eeg_channel, :] * np.sign(pcc),
                     )
-                    ax.plot(
+                    axes[1].plot(
                         eog_data[epoch, eog_channel, :],
                     )
-                    fig_.show()
-            ax = axes[eog_channel]
-            ax.axline((0, .5), (1, 0.5), c="r")
-            ax.axline((0, .0), (1, 0.), c="g")
-            ax.plot(pcc_list)
-            ax.set_title("EEG {} - EOG {} | {:.3f}".format(eeg_channel, eog_channel, pcc))
-            ax.set_ylim(-1, 1)
-            ax.grid()
+                    fig.show()
+                    ind = "\t\t<------------"
+                print(f"EEG:{eeg_channel} EOG:{eog_channel} EPOCH:{epoch} - {pcc:.3f}{ind}")
+
+            # ax = axes[eog_channel]
+            # ax.axline((0, .5), (1, 0.5), c="r")
+            # ax.axline((0, .0), (1, 0.), c="g")
+            # ax.plot(pcc_list)
+            # ax.set_title("EEG {} - EOG {} | {:.3f}".format(eeg_channel, eog_channel, pcc))
+            # ax.set_ylim(-1, 1)
+            # ax.grid()
         plt.show()

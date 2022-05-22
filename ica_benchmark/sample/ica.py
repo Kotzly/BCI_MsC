@@ -9,7 +9,7 @@ def sample_ica_data(N=20000, n_electrodes=6, seed=42):
     rv = norm()
     x = np.linspace(norm.ppf(1e-15), norm.ppf(1 - 1e-3), N)
     x2 = np.linspace(norm.ppf(1e-3), norm.ppf(1 - 1e-15), N)
-    dist = (rv.pdf(x))** 6 * 80
+    dist = (rv.pdf(x)) ** 6 * 80
 
     artifact = dist
 
