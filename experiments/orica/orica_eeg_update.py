@@ -10,7 +10,7 @@ from pathlib import Path
 
 if __name__ == "__main__":
 
-    uid = "A07"
+    uid = "A01"
     filepath = Path(f"/home/paulo/Documents/datasets/BCI_Comp_IV_2a/gdf/{uid}T.gdf")
     BCI_IV_Comp_Dataset.EVENT_MAP_DICT = {
         "277": 0,
@@ -18,13 +18,8 @@ if __name__ == "__main__":
         "1072": 2
     }
     epochs = BCI_IV_Comp_Dataset.load_as_epochs(filepath, load_eog=True, tmin=4., tmax=60., reject=False).load_data()
-    exclude_channels = ["EEG-Fz"]
-    eeg_epochs = epochs.copy().pick("eeg")#.pick([ch for ch in epochs.ch_names if not ch in exclude_channels])
-    # eeg_epochs = epochs.copy().pick("eeg").pick(['EEG-Fz', 'EEG-C3', 'EEG-Cz', 'EEG-C4', 'EEG-Pz'])
-    # eog_epochs = epochs.copy().pick("eog").pick(['EOG-left', 'EOG-central', 'EOG-right'])
-    # eeg_epochs = epochs.copy().pick("eeg").pick(['EEG-C3', 'EEG-Cz', 'EEG-C4', 'EEG-Pz'])
-    # eog_epochs = epochs.copy().pick("eog").pick(['EOG-left'])
-    eog_epochs = epochs.copy().pick("eog").pick(['EOG-central'])
+    eeg_epochs = epochs.copy().pick("eeg")
+    eog_epochs = epochs.copy().pick("eog")
     print(eog_epochs.ch_names)
     print(eeg_epochs.ch_names)
     # exit()
@@ -37,27 +32,36 @@ if __name__ == "__main__":
     single_epoch_eeg = eeg_epochs.get_data().transpose(1, 0, 2).reshape(n_channels, -1)
     pd.DataFrame(single_epoch_eeg).to_csv(f"{uid}T.csv", header=False, index=False)
     # ica = ORICA(mode="constant", n_channels=n_channels, block_update=True, size_block=8, stride=8, lw_0=.0078, lm_0=0.0078)
-    ica = ORICA(mode="decay", n_channels=n_channels, block_update=True, size_block=8, stride=8, lm_0=.995, lw_0=.995, gamma=0.6, n_sub=1)
+    ica = ORICA(mode="decay", n_channels=n_channels, block_update=True, size_block=8, stride=8, lm_0=.995, lw_0=.995, gamma=0.6, n_sub=0)
     # ica = ORICA(mode="adaptative", n_channels=n_channels, block_update=True, size_block=8, stride=8, lm_0=.15, lw_0=.15, n_sub=3)
     # print("PEARSON", pearsonr(eog_data.transpose(1, 0, 2).reshape(2, -1)[0], eog_data.transpose(1, 0, 2).reshape(2, -1)[1]))
     
+    mode = "ORICA"
     # MATLAB
-    # matlab_filtered = pd.read_csv("/home/paulo/Documents/GIT/orica/filtered.csv", index_col=None, header=None).to_numpy().T
-    # assert matlab_filtered.shape == single_epoch_eeg.shape, (matlab_filtered.shape, single_epoch_eeg.shape)
-    # n_epochs, _, n_times = eeg_data.shape
-    # n_channels = n_channels
-    # matlab_filtered = matlab_filtered.reshape(n_channels, n_epochs, n_times).transpose(1, 0, 2)
-    # eeg_sources_data = matlab_filtered
+    if mode == "MATLAB":
+        matlab_filtered = pd.read_csv("/home/paulo/Documents/GIT/orica/filtered_orica.csv", index_col=None, header=None).to_numpy()
+        assert matlab_filtered.shape == single_epoch_eeg.shape, (matlab_filtered.shape, single_epoch_eeg.shape)
+        n_epochs, _, n_times = eeg_data.shape
+        n_channels = n_channels
+        matlab_filtered = matlab_filtered.reshape(n_channels, n_epochs, n_times).transpose(1, 0, 2)
+        eeg_sources_data = matlab_filtered
     ##################################################################################################
-    # fica = FastICA(n_channels)
-    # n_epochs, n_channels, n_times = eeg_data.shape
-    # eeg_sources_data = fica.fit_transform(
-    #     eeg_data.transpose(1, 0, 2).reshape(n_channels, -1).T
-    # ).T.reshape(n_channels, n_epochs, n_times).transpose(1, 0, 2)
+    if mode == "FastICA":
+        fica = FastICA(n_channels)
+        n_epochs, n_channels, n_times = eeg_data.shape
+        eeg_sources_data = fica.fit_transform(
+            eeg_data.transpose(1, 0, 2).reshape(n_channels, -1).T
+        ).T.reshape(n_channels, n_epochs, n_times).transpose(1, 0, 2)
     ##################################################################################################
-    eeg_sources_data = ica.transform_epochs(eeg_epochs, scaling=1e6)
+    if mode == "ORICA":
+        # eeg_sources_data = ica.transform_epochs(eeg_epochs, scaling=1e6, save=False)
+        n_epochs, n_channels, n_times = eeg_data.shape
+        x = eeg_data.transpose(1, 0, 2).reshape(n_channels, -1)
+        eeg_sources_data = ica.transform(x, scaling=1e6, save=False).reshape(n_channels, n_epochs, n_times).transpose(1, 0, 2)
+        
     ##################################################################################################
-    # eeg_sources_data = eeg_data
+    if mode is None:
+        eeg_sources_data = eeg_data
 
     n_eeg_channels = eeg_sources_data.shape[1]
     n_eog_channels = eog_data.shape[1]
@@ -74,6 +78,7 @@ if __name__ == "__main__":
     print("[CORRELATIONS] ICA on EEG (last epoch):", match_corr_epochs(eeg_sources_data[[-1]], eog_data[[-1]])[1])
 
     fig, axes = plt.subplots(2, 1, figsize=(20, 4))
+    fig.suptitle("Correlation")
     axes[0].plot(
         windowed_correlation(
             eeg_sources_data[-1],

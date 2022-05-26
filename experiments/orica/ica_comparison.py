@@ -39,7 +39,7 @@ if __name__ == "__main__":
         # eeg_epochs = epochs.copy().pick("eeg").pick(['EEG-Fz', 'EEG-C3', 'EEG-Cz', 'EEG-C4', 'EEG-Pz'])
         # eog_epochs = epochs.copy().pick("eog").pick(['EOG-left', 'EOG-right'])
         eeg_epochs = epochs.copy().pick("eeg")
-        eog_epochs = epochs.copy().pick("eog").pick(['EOG-right'])
+        eog_epochs = epochs.copy().pick("eog")
 
         eog_data = eog_epochs.get_data()
         eeg_data = eeg_epochs.get_data()
@@ -67,7 +67,7 @@ if __name__ == "__main__":
                 ).T.reshape(n_channels, n_epochs, n_times).transpose(1, 0, 2)
             ##################################################################################################
             elif algorithm == "ORICA":
-                ica = ORICA(mode="decay", n_channels=n_channels, block_update=True, size_block=8, stride=8, lm_0=.995, lw_0=.995, gamma=.6, n_sub=1)
+                ica = ORICA(mode="decay", n_channels=n_channels, block_update=True, size_block=8, stride=8, lm_0=.995, lw_0=.995, gamma=.6, n_sub=2)
                 # ica = ORICA(mode="constant", n_channels=n_channels, block_update=True, size_block=8, stride=8, lm_0=.005, lw_0=.005, n_sub=2)
                 eeg_sources_data = ica.transform_epochs(eeg_epochs, scaling=1e6, verbose=False)
             else:
@@ -115,12 +115,12 @@ if __name__ == "__main__":
         json.dump(results, f, indent=4)
     
     for algorithm in algorithms:
-        avg_corr = np.mean(
+        avg_corr = np.stack(
             [
                 results[uid][algorithms.index(algorithm)]["last_epoch_correlation"]
                 for uid in uids
             ]
-        )
+        ).mean(axis=0)
         print(
             f"[{algorithm}] Mean last epoch Corr.:",
             avg_corr

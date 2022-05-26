@@ -9,6 +9,11 @@ from scipy.stats import pearsonr as pcc
 
 adaptative_constants = namedtuple("adaptative_constants", ["a", "b", "sigmarn"])
 
+DEBUG = True
+
+def log(string):
+    if DEBUG:
+        print(string)
 
 def match_corr(eeg, eog):
     corr_m = list()
@@ -16,11 +21,11 @@ def match_corr(eeg, eog):
         line = list()
         for eog_ch in eog:
             line.append(
-                np.abs(pcc(eeg_ch, eog_ch)[0])
+                pcc(eeg_ch, eog_ch)[0]
             )
         corr_m.append(line)
     corr_m = np.array(corr_m)
-    max_corr_ch = np.argmax(corr_m, axis=0)
+    max_corr_ch = np.argmax(np.abs(corr_m), axis=0)
     max_corr_m = corr_m[max_corr_ch, np.arange(len(eog))]
     return max_corr_ch, max_corr_m, corr_m
 
@@ -93,14 +98,13 @@ def update_m(x, m, lambdas=.005):
     # [TODO] Check if it is possible to no use the median value, and use the full array
     # i.e. `l = 1 - lambdas`
 
-    l_avg = 1 - lambdas[len(lambdas) // 2] # In code
+    l_avg = 1 - lambdas[len(lambdas) // 2 - 1] # In code
     l = l_avg#1 - lambdas
     # l = 1 - lambdas
 
     Q = l / (1 - l) + np.trace(v.T @ v) / n_p # In code
     # Q = (l / (1 - l) + np.diag(v.T @ v)).sum() / n_p
-    
-    # print("2ERROR", l.shape, Q.shape, (v @ v.T @ m).shape)
+
     # Division by n_p to normalize the block-wide v @ v.T multiplication]
     # v @ v.T = sum_{i=0}^{n_p} v[:, [i]] @ v.T[[i], :]
     m = (1 / l_avg) * (m - v @ v.T @ m / Q / n_p)
@@ -118,7 +122,8 @@ def update_w_block(v, w, lambdas=None, n_sub=1):
     elif isinstance(lambdas, float):
         lambdas = np.array([lambdas] * n_p)
 
-    lambdas = lambdas[-n_p:]
+    assert len(lambdas) == n_p, (len(lambdas), n_p)
+    # lambdas = lambdas[-n_p:]
     # assert len(lambdas) == n_p
     y = w @ v
     fy = nonlinearity(y, n_sub=n_sub)
@@ -129,6 +134,38 @@ def update_w_block(v, w, lambdas=None, n_sub=1):
     I = np.eye(n_ch)
 
     w = lambda_prod * (w - y @ np.diag(lambdas / Q) @ fy.T @ w)
+    w = orthogonalize(w)
+    return w
+
+def update_w_block_paper(v, w, lambdas=None, n_sub=1):
+    # Online Recursive ICA Algorithm Used for Motor Imagery EEG Signal
+    # https://github.com/goodshawn12/orica/blob/master/orica.m
+    n_ch, n_p = v.shape
+    if isinstance(lambdas, list):
+        lambdas = np.array(lambdas)
+    elif isinstance(lambdas, float):
+        lambdas = np.array([lambdas] * n_p)
+
+    lambdas = lambdas[-n_p:]
+    # assert len(lambdas) == n_p
+    y = w @ v
+    fy = nonlinearity(y, n_sub=n_sub)
+
+    lambda_prod = np.product(1 / (1 - lambdas))
+    # dot(f, y, 1) = (fy * y).sum(axis=0)
+    Q = (1 - lambdas) / lambdas + np.diag(fy.T @ y)
+    # Q = (1 - lambdas) / lambdas + (fy.T * y).sum(axis=1)
+    I = np.eye(n_ch)
+    D = np.stack(
+        [
+            y[:, [i]] * fy[:, [i]].T
+            for i in range(n_p)
+
+        ]
+    )
+    Q = Q.reshape(n_p, 1, 1)
+    # w = lambda_prod * (w - y @ np.diag(lambdas / Q) @ fy.T @ w)
+    w = lambda_prod * (I - (D / Q).sum(axis=0)) @ w
     w = orthogonalize(w)
     
     return w
@@ -253,9 +290,9 @@ class ORICA(BaseEstimator):
             # MATLAB code does state.counter + dataRange
             # So it basically uses 2 times the iteration count, so we do that here
             # [TODO] should we try parameterizing this 2?
-            iteration *= 2
-            div = np.arange(iteration - n_p + 1, iteration + 1) ** self.gamma
+            div = iteration ** self.gamma
             lm, lw = self.lm_0 / div, self.lw_0 / div
+            # log((lm, iteration))
             # print(iteration - n_p + 1, lm[0], np.product(1 / (1 - lm[-8:])))
             lm = np.where(lm < self.lambda_const, self.lambda_const, lm)
             lw = np.where(lw < self.lambda_const, self.lambda_const, lw)
@@ -288,7 +325,8 @@ class ORICA(BaseEstimator):
         return lm , lw, sigma
 
     def fit(self, x, y=None):
-        self.base_sigma = self.NSI(self.w_0 @ self.m_0 @ x)
+        pass
+        # self.base_sigma = self.NSI(self.w_0 @ self.m_0 @ x)
 
     def transform_(self, X, warm_start=False):
         X_filtered = X.copy()
@@ -307,6 +345,7 @@ class ORICA(BaseEstimator):
             for n_pass in range(self.n_passes):
 
                 lm, lw, sigma = self.get_lambdas(X_i, i, self.m, self.w)
+                print(lm)
                 self.m = update_m(X_i, self.m, lambdas=lm)
                 self.w = update_w_block(self.m @ X_i, self.w, lambdas=lw, n_sub=self.n_sub)
 
@@ -332,15 +371,17 @@ class ORICA(BaseEstimator):
         self.lambdas = [self.lw_0]
         self.sigmas = list()
         im_cnt = 0
+        counter = 0
         for i in tqdm(range(self.size_block, n_times + self.stride, self.stride), leave=False):
             X_i = X[:, i - self.size_block:i]
             n_p = X_i.shape[1]
             for n_pass in range(self.n_passes):
-
-                lm, lw, sigma = self.get_lambdas(X_i, i, self.m, self.w)
+                
+                lm, lw, sigma = self.get_lambdas(X_i, np.arange(i - self.size_block, i) + 1 + counter, self.m, self.w)
 #                    print(e, n_times, e * n_times + i, max(lm), min(lm))
-                m = update_m(X_i, self.m, lambdas=lm)
-                w = update_w_block(self.m @ X_i, self.w, lambdas=lw, n_sub=self.n_sub)
+                # [TODO use new m for w update]
+                m = update_m(X_i, self.m, lambdas=lm[-n_p:])
+                w = update_w_block(m @ X_i, self.w, lambdas=lw[-n_p:], n_sub=self.n_sub)
 
                 self.m, self.w = m, w
 
@@ -350,6 +391,8 @@ class ORICA(BaseEstimator):
                 self.lambdas.append(lw.mean())
                 self.sigmas.append(sigma)
             
+                counter += self.stride
+
             if ((i % 100) < self.stride) and save:
                 fig = plt.figure(figsize=(9, 9))
                 plt.imshow(self.m)
@@ -393,6 +436,7 @@ class ORICA(BaseEstimator):
         self.lambdas = [self.lw_0]
         self.sigmas = list()
         im_cnt = 0
+        counter = 0
         epoch_iter = range(n_epochs)
         if verbose:
             epoch_iter = tqdm(epoch_iter)
@@ -405,11 +449,11 @@ class ORICA(BaseEstimator):
                 n_p = X_i.shape[1]
                 for n_pass in range(self.n_passes):
 
-                    lm, lw, sigma = self.get_lambdas(X_i, e * n_times + i, self.m, self.w)
-#                    print(e, n_times, e * n_times + i, max(lm), min(lm))
-                    m = update_m(X_i, self.m, lambdas=lm)
-                    w = update_w_block(self.m @ X_i, self.w, lambdas=lw, n_sub=self.n_sub)
-
+                    lm, lw, sigma = self.get_lambdas(X_i, np.arange(e * n_times + i - self.size_block, e * n_times + i) + 1 + counter, self.m, self.w)
+                    # print("{}-{}:{}-{}".format(e * n_times + i - n_p + 1, e * n_times + i + 1, lm[0], lm[-1]))
+                    m = update_m(X_i, self.m, lambdas=lm[-n_p:])
+                    w = update_w_block(m @ X_i, self.w, lambdas=lw[-n_p:], n_sub=self.n_sub)
+                    # print(e * n_times + i, m.max())
                     self.m, self.w = m, w
 
                     y = self.w @ self.m @ X_i
@@ -417,6 +461,8 @@ class ORICA(BaseEstimator):
 
                     self.lambdas.append(lw.mean())
                     self.sigmas.append(sigma)
+
+                    counter += self.stride
                 
                 if ((i % 100) < self.stride) and save:
                     fig = plt.figure(figsize=(9, 9))
@@ -464,7 +510,7 @@ if __name__ == "__main__":
 
     ica = ORICA(mode="decay", block_update=True, size_block=8, stride=8, gamma=0.6, lm_0=.995, lw_0=.995)
     
-    ica.fit(X)
+    # ica.fit(X)
     X_filtered = ica.transform(X)
     
     plot_various(X, d=1, figsize=(20, 4), title="Raw")
