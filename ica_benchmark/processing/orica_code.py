@@ -225,6 +225,7 @@ class ORICA(BaseEstimator):
         self.w_0 = self.m_0 = self.I
         self.w = None
         self.m = None
+        self.iteration = None
 
     def ANSI(self, y):
         # Adaptative Non stationary Index
@@ -304,15 +305,20 @@ class ORICA(BaseEstimator):
             if not hasattr(self, "lm"):
                 self.lm = np.repeat([self.lm_0], n_p)
                 self.lw = np.repeat([self.lw_0], n_p)
-                self.z_min = sigma
+            
+            if not hasattr(self, "z_min"):
+                if hasattr(self, "sigmas") and (len(self.sigmas) > 0):
+                    self.z_min = min(self.sigmas)
+                else:
+                    self.z_min = sigma
 
             # Code updates z_min, although paper doesnt say to do that
-            # self.z_min = min(sigma, self.z_min)
+            self.z_min = min(sigma, self.z_min)
 
             G = self.G(sigma, z_min=self.z_min)
             lm = self.lm - alpha * self.lm ** 2 + beta * G * self.lm
             lw = self.lw - alpha * self.lw ** 2 + beta * G * self.lw
-            self.lw, self.lm = lw, lm            
+            self.lw, self.lm = lw, lm
 
         elif self.mode == "adaptative_exp":
             sigma = self.NSI(y)
@@ -368,16 +374,20 @@ class ORICA(BaseEstimator):
         if not warm_start:
             self.m = self.m_0
             self.w = self.w_0
+            counter = 0
+        else:
+            assert not ((self.w is None) or (self.m is None)), "You need to call transform once"
+            counter = self.iteration[-self.size_block:]
+
         self.lambdas = [self.lw_0]
         self.sigmas = list()
         im_cnt = 0
-        counter = 0
         for i in tqdm(range(self.size_block, n_times + self.stride, self.stride), leave=False):
             X_i = X[:, i - self.size_block:i]
             n_p = X_i.shape[1]
             for n_pass in range(self.n_passes):
-                
-                lm, lw, sigma = self.get_lambdas(X_i, np.arange(i - self.size_block, i) + 1 + counter, self.m, self.w)
+                self.iteration = np.arange(i - self.size_block, i) + 1 + counter
+                lm, lw, sigma = self.get_lambdas(X_i, self.iteration, self.m, self.w)
 #                    print(e, n_times, e * n_times + i, max(lm), min(lm))
                 # [TODO use new m for w update]
                 m = update_m(X_i, self.m, lambdas=lm[-n_p:])
@@ -433,6 +443,11 @@ class ORICA(BaseEstimator):
         if not warm_start:
             self.m = self.m_0
             self.w = self.w_0
+            counter = 0
+        else:
+            assert not ((self.w is None) or (self.m is None)), "You need to call transform once"
+            counter = self.iteration[-self.size_block:]
+
         self.lambdas = [self.lw_0]
         self.sigmas = list()
         im_cnt = 0
@@ -448,8 +463,9 @@ class ORICA(BaseEstimator):
                 X_i = X[e, :, i - self.size_block:i]
                 n_p = X_i.shape[1]
                 for n_pass in range(self.n_passes):
+                    self.iteration = np.arange(e * n_times + i - self.size_block, e * n_times + i) + 1 + counter
 
-                    lm, lw, sigma = self.get_lambdas(X_i, np.arange(e * n_times + i - self.size_block, e * n_times + i) + 1 + counter, self.m, self.w)
+                    lm, lw, sigma = self.get_lambdas(X_i, self.iteration, self.m, self.w)
                     # print("{}-{}:{}-{}".format(e * n_times + i - n_p + 1, e * n_times + i + 1, lm[0], lm[-1]))
                     m = update_m(X_i, self.m, lambdas=lm[-n_p:])
                     w = update_w_block(m @ X_i, self.w, lambdas=lw[-n_p:], n_sub=self.n_sub)

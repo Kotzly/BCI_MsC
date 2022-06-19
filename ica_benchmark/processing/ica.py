@@ -19,16 +19,16 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 mne.set_log_level("ERROR")
 
 
-def _get_kwargs(m, is_extended=False):
-    if is_extended:
-        return dict(method=m, fit_params=dict(extended=True))
-    return dict(method=m)
+def _get_kwargs(m, is_extended=None):
+    if is_extended is None:
+        return dict(method=m)
+    return dict(method=m, fit_params=dict(extended=is_extended))
 
 
 _ica_kwargs_dict = {
     "fastica": _get_kwargs("fastica"),
     "infomax": _get_kwargs("infomax"),
-    "picard": _get_kwargs("picard"),
+    "picard": _get_kwargs("picard", is_extended=False),
     "ext_infomax": _get_kwargs("infomax", is_extended=True),
     "ext_picard": _get_kwargs("picard", is_extended=True),
 }
@@ -145,7 +145,7 @@ class CustomICA(ICA):
             ica.fit(data[:, sel])
             self.unmixing_matrix_ = ica.components_
             self.n_iter_ = ica.n_iter_
-        elif self.method in ("infomax", "extended-infomax"):
+        elif self.method == "infomax":
             unmixing_matrix, n_iter = infomax(
                 data[:, sel],
                 random_state=random_state,
@@ -221,6 +221,6 @@ def get_ica_instance(method, n_components=None, **kwargs):
 mne.preprocessing.ica._KNOWN_ICA_METHODS = list(
     set(
         mne.preprocessing.ica._KNOWN_ICA_METHODS
-    ) | 
+    ) |
     set(get_all_methods())
 )
