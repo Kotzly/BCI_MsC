@@ -40,7 +40,7 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
     print("[{}]".format(filepath.name))
     orica_processed_dict = dict()
     for n_run, ica_method, clf_method in product(range(n_runs), ica_methods, clf_methods):
-        print("[{}/{}] Method: {}, {}".format(n_run + 1, n_runs, ica_method, clf_method))
+        print("[{}/{}] Method: {}, {}".format(n_run + 1, n_runs, ica_method, clf_method), end="")
         x_train, y_train = train_epochs.copy(), train_labels
         x_test, y_test = test_epochs.copy(), test_labels
 
@@ -203,10 +203,9 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
                 gs_cv.best_params_
             ]
         )
-
+        print(", Took {}s".format(end - start))
         print("Kappa", kappa)
-        print("Accuracy", acc)
-        print("BAS", bas)
+
 
     columns = ["run", "algorithm", "classifier", "uid", "acc", "bas", "kappa", "ica_fit_time", "best_params"]
     results = pd.DataFrame(results, columns=columns)
