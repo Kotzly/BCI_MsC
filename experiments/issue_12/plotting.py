@@ -186,7 +186,7 @@ def plot_average_algorithm_metric(results_df, metric="kappa", save_filepath=None
         res = bootstrap((df[metric], ), np.mean, n_resamples=100)
         x_c += 1.5 * w
         avg = df[metric].mean()
-        ax.bar(x_c, avg, w, yerr=([avg - res.confidence_interval.low], [res.confidence_interval.high - avg]))
+        ax.bar(x_c, avg, w, yerr=([avg - res.confidence_interval.low], [res.confidence_interval.high - avg]), color=algorithm_color_dict[algorithm])
         ax.set_xticks([])
         ax.text(x_c, -0.03, algorithm.upper(), horizontalalignment="center", fontsize=15)
         ax.text(x_c, -0.06, r"$\bar\rho={:.3f}$".format(avg), horizontalalignment="center", fontsize=15, usetex=True)

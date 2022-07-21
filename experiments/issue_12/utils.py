@@ -1,16 +1,24 @@
+from pathlib import Path
+
 import mne
 import numpy as np
 import pandas as pd
-
-from sklearn.base import BaseEstimator
-from mne.decoding import CSP
-from numpy.linalg import eig
-from mne.time_frequency import psd_welch, psd_array_welch
-from pathlib import Path
-
 from ica_benchmark.io.load import BCI_IV_Comp_Dataset
+from mne.decoding import CSP
+from mne.time_frequency import psd_array_welch, psd_welch
+from numpy.linalg import eig
+from sklearn.base import BaseEstimator
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+
 
 TEST_LABEL_FOLDER = Path("/home/paulo/Documents/datasets/BCI_Comp_IV_2a/true_labels/")
+ALL_CLF_METHODS = ["lda", "svm_rbf", "svm_linear", "svm_poly", "svm_sigmoid", "knn", "random_forest", "extra_trees", "gaussian_nb", "mlp", "logistic"]
 
 
 def cue_name(cue):
@@ -227,8 +235,83 @@ def alg_rename(alg_name):
 
 
 def get_n(x):
-    return eval(x)["sequentialfeatureselector__n_features_to_select"]
+    return eval(str(x))["sequentialfeatureselector__n_features_to_select"]
 
 
 def extract_subject_id(s):
     return int(s[1:-1])
+
+
+def get_classifier(clf_method, n_inputs=10, random_state=1):
+    if clf_method == "lda":
+        clf = LinearDiscriminantAnalysis(n_components=1, solver="svd")
+        param_grid = dict()
+    elif clf_method == "svm_rbf":
+        clf = SVC(kernel="rbf", random_state=random_state)
+        param_grid = dict(
+            C=np.logspace(-1, 3, 5),
+            gamma=np.logspace(-1, -3, 4)
+        )
+    elif clf_method == "svm_linear":
+        clf = SVC(kernel="linear", random_state=random_state)
+        param_grid = dict(
+            C=np.logspace(-1, 3, 10)
+        )
+    elif clf_method == "svm_poly":
+        clf = SVC(kernel="poly", random_state=random_state)
+        param_grid = dict(
+            C=np.logspace(-1, 3, 5),
+            gamma=np.logspace(-1, -3, 4),
+            degree=[2, 3]
+        )
+    elif clf_method == "svm_sigmoid":
+        clf = SVC(kernel="sigmoid", C=1, random_state=random_state)
+        param_grid = dict(
+            C=np.logspace(-1, 3, 5),
+            gamma=np.logspace(-1, -3, 5)
+        )
+    elif clf_method == "knn":
+        clf = KNeighborsClassifier()
+        param_grid = dict(
+            n_neighbors=[2, 4, 6, 8, 10],
+            weights=["uniform", "distance"]
+        )
+    elif clf_method == "random_forest":
+        clf = RandomForestClassifier(random_state=random_state)
+        param_grid = dict(
+            n_estimators=[5, 10, 20, 25, 30, 40],
+            max_features=["auto", "sqrt", "log2"],
+        )
+    elif clf_method == "extra_trees":
+        clf = ExtraTreesClassifier(random_state=random_state)
+        param_grid = dict(
+            n_estimators=[5, 10, 20, 25, 30, 40]
+        )
+    elif clf_method == "gaussian_nb":
+        clf = GaussianNB()
+        param_grid = dict()
+    elif clf_method == "mlp":
+        clf = MLPClassifier(random_state=random_state, max_iter=5000)
+        param_grid = dict(
+            hidden_layer_sizes=[
+                (),
+                (n_inputs,),
+                (n_inputs // 2,),
+                (n_inputs // 4),
+                (n_inputs // 2, n_inputs // 2),
+                (n_inputs // 4, n_inputs // 4),
+                (n_inputs // 2, n_inputs // 2, n_inputs // 2),
+            ],
+            activation=["relu", "logistic"]
+        )
+    elif clf_method == "logistic":
+        clf = LogisticRegression(random_state=random_state, max_iter=2000)
+        param_grid = dict(
+            C=np.logspace(0, 3, 10),
+            penalty=["l2", "none"],
+            fit_intercept=[True, False]
+        )
+    else:
+        raise Exception("Unknown classifier method: {}".format(clf_method))
+
+    return clf, param_grid

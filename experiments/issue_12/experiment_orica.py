@@ -18,8 +18,7 @@ from itertools import product
 import random
 
 from utils import get_classifier, load_subject_epochs, whitening, PSD, ConcatenateChannelsPSD
-from utils import alg_rename, extract_subject_id, get_n
-from plotting import plot_best_algorithm, sortedgroupedbar, plot_average_algorithm_metric, boxplot_algorithms
+from utils import alg_rename, extract_subject_id, get_n, ALL_CLF_METHODS
 
 
 def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, random_state=1):
@@ -39,8 +38,9 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
 
     results = list()
     print("[{}]".format(filepath.name))
+    orica_processed_dict = dict()
     for n_run, ica_method, clf_method in product(range(n_runs), ica_methods, clf_methods):
-        print("[{}/{}] Method: {}".format(n_run + 1, n_runs, ica_method))
+        print("[{}/{}] Method: {}, {}".format(n_run + 1, n_runs, ica_method, clf_method))
         x_train, y_train = train_epochs.copy(), train_labels
         x_test, y_test = test_epochs.copy(), test_labels
 
@@ -66,55 +66,60 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
                 window="hamming",
             )
         elif "orica" in ica_method:
-            x_train = x_train.get_data()
-            x_test = x_test.get_data()
-            n_sub = int(ica_method.split(" ")[-1])
+            if ica_method in orica_processed_dict:
+                (x_train, x_test) = orica_processed_dict[ica_method]
+            else:
+                x_train = x_train.get_data()
+                x_test = x_test.get_data()
+                n_sub = int(ica_method.split(" ")[-1])
 
-            n_channels = len(selected_channels)
-            ICA = ORICA(
-                mode="decay",
-                n_channels=n_channels,
-                block_update=True,
-                size_block=8,
-                stride=8,
-                lm_0=.995,
-                lw_0=.995,
-                gamma=.6,
-                n_sub=n_sub,
-            )
-            ICA.fit(x_train)
-
-            n_epochs, n_channels, n_times = x_train.shape
-            x = x_train.transpose(1, 0, 2).reshape(n_channels, -1)
-            x_train = (
-                ICA
-                .transform(
-                    x,
-                    scaling=1e6,
-                    save=False,
+                n_channels = len(selected_channels)
+                ICA = ORICA(
+                    mode="decay",
+                    n_channels=n_channels,
+                    block_update=True,
+                    size_block=8,
+                    stride=8,
+                    lm_0=.995,
+                    lw_0=.995,
+                    gamma=.6,
+                    n_sub=n_sub,
                 )
-                .reshape(n_channels, n_epochs, n_times)
-                .transpose(1, 0, 2)
-            )
+                ICA.fit(x_train)
 
-            #################################################################################
-            ICA.mode = "constant"
-            ICA.lm_0, ICA.lw_0 = 0.001, 0.001
-            #################################################################################
-
-            n_epochs, n_channels, n_times = x_test.shape
-            x = x_test.transpose(1, 0, 2).reshape(n_channels, -1)
-            x_test = (
-                ICA
-                .transform(
-                    x,
-                    scaling=1e6,
-                    save=False,
-                    warm_start=True
+                n_epochs, n_channels, n_times = x_train.shape
+                x = x_train.transpose(1, 0, 2).reshape(n_channels, -1)
+                x_train = (
+                    ICA
+                    .transform(
+                        x,
+                        scaling=1e6,
+                        save=False,
+                    )
+                    .reshape(n_channels, n_epochs, n_times)
+                    .transpose(1, 0, 2)
                 )
-                .reshape(n_channels, n_epochs, n_times)
-                .transpose(1, 0, 2)
-            )
+
+                #################################################################################
+                ICA.mode = "constant"
+                ICA.lm_0, ICA.lw_0 = 0.001, 0.001
+                #################################################################################
+
+                n_epochs, n_channels, n_times = x_test.shape
+                x = x_test.transpose(1, 0, 2).reshape(n_channels, -1)
+                x_test = (
+                    ICA
+                    .transform(
+                        x,
+                        scaling=1e6,
+                        save=False,
+                        warm_start=True
+                    )
+                    .reshape(n_channels, n_epochs, n_times)
+                    .transpose(1, 0, 2)
+                )
+                orica_processed_dict[ica_method] = (x_train, x_test)
+
             psd = PSD(
                 sfreq=train_epochs.info["sfreq"],
                 n_fft=1 * len_size,
@@ -142,13 +147,13 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
         classifier, clf_param_grid = get_classifier(clf_method, random_state=random_state + n_run, n_inputs=20)
 
         SFS = SequentialFeatureSelector(
-            LDA(n_components=1, solver=lda_solver),
+            LDA(n_components=1, solver="svd"),
             direction='forward',
             cv=4,
             scoring=make_scorer(cohen_kappa_score, greater_is_better=True)
         )
         param_grid = dict(
-            sequentialfeatureselector__n_features_to_select=[1, 3, 5, 10, 15, 20],
+            # sequentialfeatureselector__n_features_to_select=[12],
         )
         for key, value in clf_param_grid.items():
             clf_name = classifier.__class__.__name__.lower()
@@ -158,11 +163,10 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
         x_train = psd.transform(x_train)
         x_test = psd.transform(x_test)
 
-        # 2 classes
         clf = make_pipeline(
             ConcatenateChannelsPSD(),
             StandardScaler(),
-            SFS,
+            # SFS,
             classifier
         )
 
@@ -174,7 +178,7 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
             error_score=-1,
             refit=True,
             n_jobs=4,
-            verbose=2
+            verbose=0
         )
 
         start = time.time()
@@ -211,38 +215,22 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
 
 if __name__ == "__main__":
     TEST_LABEL_FOLDER = Path("/home/paulo/Documents/datasets/BCI_Comp_IV_2a/true_labels/")
-    DEFAULT_TIME_BANDS = [(3, 6)]
     root = Path("/home/paulo/Documents/datasets/BCI_Comp_IV_2a/gdf/")
     selected_channels = ["EEG-Fz", "EEG-C3", "EEG-C4", "EEG-Cz"]
+    clf_methods = ["lda", "mlp", "svm_rbf", "svm_linear"]
     filepaths = list(sorted(root.glob("A*T.gdf")))
-    N_RUNS = 10
+    N_RUNS = 8
 
-    stochastic_methods = ["picard", "fastica", "infomax", "ext_infomax"]
-    deterministic_methods = ["none", "sobi", "jade", "orica 0", "orica 1"]
-    lda_solver = "svd"
-
-    stochastic_results = dict()
+    deterministic_methods = ["none", "orica 0", "orica 1", "ext_infomax"]
     deterministic_results = dict()
 
     for filepath in filepaths:
         print(filepath.name)
-        subject_results_dict = run(filepath, ica_methods=stochastic_methods, n_runs=N_RUNS)
-        stochastic_results[filepath.name] = subject_results_dict
-
-    for filepath in filepaths:
-        print(filepath.name)
-        subject_results_dict = run(filepath, ica_methods=deterministic_methods, n_runs=1)
+        subject_results_dict = run(filepath, ica_methods=deterministic_methods, clf_methods=clf_methods, n_runs=N_RUNS)
         deterministic_results[filepath.name] = subject_results_dict
 
-    temp_list = list()
-    for i in range(N_RUNS):
-        df = pd.concat(list(deterministic_results.values()))
-        df.run = i
-        temp_list.append(df)
-
-    deterministic_results_df = pd.concat(temp_list)
     results_df = pd.concat(
-        list(stochastic_results.values()) + [deterministic_results_df]
+        list(deterministic_results.values())
     )
 
     results_df.rename(
@@ -256,13 +244,7 @@ if __name__ == "__main__":
     results_df.algorithm = results_df.algorithm.apply(alg_rename)
     results_df.uid = results_df.uid.apply(extract_subject_id)
     results_df["hyperparameters"] = results_df.best_params.apply(str)
-    results_df.best_params = results_df.best_params.apply(get_n)
+    #results_df.best_params = results_df.best_params.apply(get_n)
 
     results_df.to_csv("results.csv", index=False)
 
-    for metric in ("Kappa", "Acc.", "Bal. Acc"):
-        metric_str = metric.replace(".", "").replace(" ", "")
-        plot_best_algorithm(results_df.query("algorithm != 'ext_picard'"), "Kappa", save_filepath=f"best_alg_{metric_str}.png")
-        sortedgroupedbar(results_df.query("algorithm != 'ext_picard'"), "Kappa", save_filepath=f"bars_{metric_str}.png")
-        plot_average_algorithm_metric(results_df.query("algorithm != 'ext_picard'"), "Kappa", save_filepath=f"averages_{metric_str}.png")
-        boxplot_algorithms(results_df.query("algorithm != 'ext_picard'"), "Kappa", save_filepath=f"boxplot_{metric_str}.png")
