@@ -33,4 +33,5 @@ dependencies:
     - statsmodels==0.13.2
     - tqdm==4.60.0
     - traitlets==5.0.5
+    - EDFlib-Python=1.0.6
 
