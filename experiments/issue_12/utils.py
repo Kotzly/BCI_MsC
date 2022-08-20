@@ -291,16 +291,13 @@ def get_classifier(clf_method, n_inputs=10, random_state=1):
         clf = GaussianNB()
         param_grid = dict()
     elif clf_method == "mlp":
-        clf = MLPClassifier(random_state=random_state, max_iter=5000)
+        clf = MLPClassifier(validation_fraction=0.2, random_state=random_state, max_iter=2500)
         param_grid = dict(
             hidden_layer_sizes=[
                 (),
-                (n_inputs,),
                 (n_inputs // 2,),
                 (n_inputs // 4),
-                (n_inputs // 2, n_inputs // 2),
                 (n_inputs // 4, n_inputs // 4),
-                (n_inputs // 2, n_inputs // 2, n_inputs // 2),
             ],
             activation=["relu", "logistic"]
         )
