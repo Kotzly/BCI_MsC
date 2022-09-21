@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.stats import norm
 
-
 def sample_ica_data(N=20000, n_electrodes=6, seed=42):
 
     np.random.seed(seed)
@@ -56,3 +55,24 @@ def sample_sines_data(N=20000, n_electrodes=22, seed=42):
     X += noise
 
     return X, sources, W
+
+def sample_iva_data(K, M, N, seed=42):
+    # K number of datasets
+    # M number of SVC (electrodes)
+    # N number of samples
+    np.random.seed(seed)
+
+    X, S, A = list(), list(), list()
+    SCVs = list()
+    for m in range (M):
+        cov = np.random.normal(size=(K, K))
+        cov = cov @ cov.T
+        SCV = np.random.multivariate_normal(np.zeros(K), cov, size=N).T
+        SCVs.append(SCV)
+    S = np.stack(SCVs).transpose(1, 0, 2)
+    assert S.shape == (K, M, N)        
+        
+    A = np.random.normal(0, 1, size=(K, M, M))
+    X = np.stack([a @ s for a, s in zip(A, S)])    
+    
+    return X, S, A
