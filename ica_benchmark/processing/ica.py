@@ -12,6 +12,7 @@ from mne.preprocessing.ica import (
 import numpy as np
 
 from ica_benchmark.processing.jade import JadeICA
+from ica_benchmark.processing.sobi import SOBI
 from coroica import UwedgeICA, CoroICA
 import warnings
 
@@ -35,9 +36,9 @@ _ica_kwargs_dict = {
 
 
 _coro_kwargs_dict = {
-    "sobi": dict(partitionsize=int(10 ** 6), timelags=list(range(1, 101))),  # [TODO] resolve nan issue
+    "sobi_coro": dict(partitionsize=int(10 ** 6), timelags=list(range(1, 101))),  # [TODO] resolve nan issue
     "choi_var": dict(),
-    "choi_vartd": dict(timelags=[1, 2, 3, 4, 5]),  # [TODO] resolve nan issue 
+    "choi_vartd": dict(timelags=[1, 2, 3, 4, 5]),  # [TODO] resolve nan issue
     "choi_td": dict(instantcov=False, timelags=[1, 2, 3, 4, 5]),  # [TODO] resolve nan issue
     "coro": dict(),  # [TODO] resolve nan issue
 }
@@ -46,8 +47,11 @@ _coro_kwargs_dict = {
 _jade_kwargs_dict = {"jade": dict()}
 
 
-_all_methods = (
-    list(_ica_kwargs_dict) + list(_coro_kwargs_dict) + list(_jade_kwargs_dict)
+_sobi_kwargs_dict = {"sobi": dict(lags=100)}
+
+
+_all_methods = list(
+    {**_ica_kwargs_dict, **_coro_kwargs_dict, **_jade_kwargs_dict, **_sobi_kwargs_dict}
 )
 
 
@@ -183,6 +187,12 @@ class CustomICA(ICA):
             self.unmixing_matrix_ = jade_ica.B
             self.n_iter_ = jade_ica.n_iter + 1
 
+        elif self.method in _sobi_kwargs_dict:
+            sobi_ica = SOBI(**_sobi_kwargs_dict[self.method])
+            sobi_ica.fit(data[:, sel])
+            self.unmixing_matrix_ = sobi_ica.W
+            self.n_iter_ = sobi_ica.counter + 1
+
         assert self.unmixing_matrix_.shape == (self.n_components_,) * 2
         norms = self.pca_explained_variance_
         stable = norms / norms[0] > 1e-6  # to be stable during pinv
@@ -219,8 +229,5 @@ def get_ica_instance(method, n_components=None, **kwargs):
 
 
 mne.preprocessing.ica._KNOWN_ICA_METHODS = list(
-    set(
-        mne.preprocessing.ica._KNOWN_ICA_METHODS
-    ) |
-    set(get_all_methods())
+    set(mne.preprocessing.ica._KNOWN_ICA_METHODS) | set(get_all_methods())
 )
