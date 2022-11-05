@@ -22,6 +22,29 @@ from utils import get_classifier, load_subject_epochs, PSD, ConcatenateChannelsP
 from utils import alg_rename, extract_subject_id
 
 
+def is_stochastic(ica_method, clf_method):
+    if ("orica" in ica_method) or (ica_method in ("sobi", "jade", "none", None)):
+        if clf_method in ("lda", "knn", "gaussian_nb"):
+            return False
+    return True
+
+
+def repeat_deterministic(results_df, times=1):
+    original_df = results_df.copy()
+    results_df = results_df.copy()
+    keys = ["algorithm", "classifier"]
+
+    non_repeated = original_df.groupby(keys, as_index=False).nunique().query("run == 1")
+    for _, (alg, clf) in non_repeated[keys].iterrows():
+        for i in range(times):
+            sliced_df = original_df.query("(algorithm == @alg) & (classifier == @clf)").copy()
+            if i == sliced_df.run.unique().item():
+                continue
+            sliced_df.loc[:, ["run"]] = i
+            results_df = pd.concat([results_df, sliced_df], axis=0)
+    return results_df.reset_index(drop=True)
+
+
 def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, random_state=1):
     np.random.seed(random_state)
     random.seed(random_state)
@@ -41,8 +64,15 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
     results = list()
     print("[{}]".format(filepath.name))
     ica_processed_dict = dict()
-
+    sfs_dict = dict()
+    
     for n_run, ica_method, clf_method in product(range(n_runs), ica_methods, clf_methods):
+        run_seed = random_state + n_run
+        
+        if not is_stochastic(ica_method, clf_method) and n_run > 0:
+            # Save time
+            continue
+            
         print("[{}/{}] Method: {}, {}".format(n_run + 1, n_runs, ica_method, clf_method), end="")
         x_train, y_train = train_epochs.copy(), train_labels
         x_test, y_test = test_epochs.copy(), test_labels
@@ -53,11 +83,14 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
         # JADE and Picard needs whitening too, but
         # Used jade already whitens the signals
         # MNE whitens the signal when using PICARD
-        if (random_state, ica_method) in ica_processed_dict:
-            (x_train, x_test) = ica_processed_dict[(random_state, ica_method)]
+        if (run_seed, ica_method) in ica_processed_dict:
+            (x_train, x_test) = ica_processed_dict[(run_seed, ica_method)]
         else:
-
-            if "orica" in ica_method:
+            
+            if ica_method in ("none", None):
+                x_train = x_train.get_data()
+                x_test = x_test.get_data()
+            elif "orica" in ica_method:
                 x_train = x_train.get_data()
                 x_test = x_test.get_data()
                 n_sub = int(ica_method.split(" ")[-1])
@@ -108,12 +141,12 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
                 )
 
             else:
-                ICA = get_ica_instance(ica_method, random_state=random_state + n_run)
+                ICA = get_ica_instance(ica_method, random_state=run_seed)
                 ICA.fit(x_train)
                 x_train = ICA.transform(x_train)
                 x_test = ICA.transform(x_test)
 
-            ica_processed_dict[(random_state, ica_method)] = (x_train, x_test)
+            ica_processed_dict[(run_seed, ica_method)] = (x_train, x_test)
 
         if isinstance(x_train, Epochs) and isinstance(x_test, Epochs):
             psd = PSD(
@@ -142,36 +175,47 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
                 )
             )
 
-        classifier, clf_param_grid = get_classifier(clf_method, random_state=random_state + n_run)
+        classifier, clf_param_grid = get_classifier(clf_method, random_state=run_seed)
 
-        SFS = SequentialFeatureSelector(
-            LogisticRegression(),
-            direction='forward',
-            cv=4,
-            scoring=make_scorer(cohen_kappa_score, greater_is_better=True)
-        )
-        param_grid = dict(
-            sequentialfeatureselector__n_features_to_select=[10],
-            # selectkbest__k=[5, 8, 13, 21],
-        )
-        for key, value in clf_param_grid.items():
-            clf_name = classifier.__class__.__name__.lower()
-            param_grid["{}__{}".format(clf_name, key)] = value
-
+        # Feature extraction
         psd.fit(x_train)
         x_train = psd.transform(x_train)
         x_test = psd.transform(x_test)
 
-        clf = make_pipeline(
+        # Feature scaling
+        scaling = make_pipeline(
             ConcatenateChannelsPSD(),
             StandardScaler(),
-            SFS,
-            classifier
         )
+        x_train = scaling.fit_transform(x_train, y_train)
+        x_test = scaling.transform(x_test)
 
+        # Feature selection
+        pp_start = time.time()
+        SFS = SequentialFeatureSelector(
+            LogisticRegression(),
+            direction='forward',
+            cv=4,
+            scoring=make_scorer(cohen_kappa_score, greater_is_better=True),
+            n_features_to_select="auto",
+            tol=0.01
+        )
+        preprocessing = make_pipeline(
+            SFS
+        )
+        if ica_method in sfs_dict:
+            SFS.support_ = sfs_dict[ica_method]
+        else:
+            preprocessing.fit(x_train, y_train)
+            sfs_dict[ica_method] = SFS.support_
+        x_train = preprocessing.transform(x_train)
+        x_test = preprocessing.transform(x_test)
+        pp_end = time.time()
+
+        # Classifier hyperparam opt
         gs_cv = GridSearchCV(
-            clf,
-            param_grid=param_grid,
+            classifier,
+            param_grid=clf_param_grid,
             cv=4,
             scoring=make_scorer(cohen_kappa_score, greater_is_better=True),
             error_score=-1,
@@ -179,15 +223,11 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
             n_jobs=4,
             verbose=0
         )
-
-        start = time.time()
+        fit_start = time.time()
         gs_cv.fit(x_train, y_train)
-        end = time.time()
+        fit_end = time.time()
 
         pred = gs_cv.predict(x_test)
-        bas = balanced_accuracy_score(y_test, pred)
-        acc = accuracy_score(y_test, pred)
-        kappa = cohen_kappa_score(y_test, pred)
 
         results.append(
             [
@@ -195,19 +235,21 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
                 ica_method,
                 clf_method,
                 filepath.name.split(".")[0],
-                acc,
-                bas,
-                kappa,
-                end - start,
-                gs_cv.best_params_
+                accuracy_score(y_test, pred),
+                balanced_accuracy_score(y_test, pred),
+                cohen_kappa_score(y_test, pred),
+                fit_end - fit_start,
+                pp_end - pp_start,
+                str({**gs_cv.best_params_, "selected_features": (sfs_dict[ica_method].astype(int))})
             ]
         )
-        print(", Took {}s".format(end - start))
-        print("Kappa", kappa)
+        n_selected_features = preprocessing[-1].support_.sum()
+        print(", Took {:.3f}s/{:.3f}s, selected {}".format(pp_end - pp_start, fit_end - fit_start, n_selected_features))
+        print("Kappa", results[-1][-4])
 
-    columns = ["run", "algorithm", "classifier", "uid", "acc", "bas", "kappa", "ica_fit_time", "best_params"]
-    results = pd.DataFrame(results, columns=columns)
-    return results
+    columns = ["run", "algorithm", "classifier", "uid", "acc", "bas", "kappa", "clf_fit_time", "preprocess_fit_time", "hyperparameters"]
+    results_df = pd.DataFrame(results, columns=columns)
+    return results_df
 
 
 if __name__ == "__main__":
@@ -215,10 +257,12 @@ if __name__ == "__main__":
     root = Path("/home/paulo/Documents/datasets/BCI_Comp_IV_2a/gdf/")
     selected_channels = ["EEG-Fz", "EEG-C3", "EEG-C4", "EEG-Cz"]
     clf_methods = ["mlp", "random_forest", "extra_trees", "gaussian_nb", "lda", "svm_sigmoid", "svm_poly", "svm_linear", "svm_rbf", "logistic_l2", "logistic_l1", "logistic"]
-    filepaths = list(sorted(root.glob("A*T.gdf")))
-    N_RUNS = 10
 
-    deterministic_methods = ["none", "orica 0", "orica 1", "ext_infomax", "sobi", "jade", "picard"]
+    filepaths = list(sorted(root.glob("A*T.gdf")))
+    N_RUNS = 12
+
+    deterministic_methods = ["none", "orica 0", "orica 1", "ext_infomax", "infomax", "sobi", "jade", "picard", "fastica", "picard_o"]
+    
     deterministic_results = dict()
 
     for filepath in filepaths:
@@ -227,8 +271,10 @@ if __name__ == "__main__":
         deterministic_results[filepath.name] = subject_results_dict
 
         results_df = pd.concat(
-            list(deterministic_results.values())
+            list(deterministic_results.values()),
+            axis=0
         )
+        results_df = repeat_deterministic(results_df, times=N_RUNS)
 
         results_df.rename(
             columns={
@@ -240,7 +286,5 @@ if __name__ == "__main__":
         )
         results_df.algorithm = results_df.algorithm.apply(alg_rename)
         results_df.uid = results_df.uid.apply(extract_subject_id)
-        results_df["hyperparameters"] = results_df.best_params.apply(str)
 
-        results_df.to_csv("results.csv", index=False)
-
+#        results_df.to_csv("results.csv", index=False)

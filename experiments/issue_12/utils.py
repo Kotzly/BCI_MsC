@@ -42,6 +42,7 @@ class ConcatenateChannelsPSD(BaseEstimator):
 
 
 class PSD(BaseEstimator):
+    # [TODO] Mantain feature names (e.g. '{channel}_{band}')
     BANDS_DICT = {
         "mu": (8, 13),
         "beta": (13, 25),
@@ -214,7 +215,7 @@ def get_classifier(clf_method, random_state=1):
     elif clf_method == "svm_linear":
         clf = SVC(kernel="linear", random_state=random_state)
         param_grid = dict(
-            C=np.logspace(-2, 4, 10)
+            C=np.logspace(-2, 3, 10)
         )
     elif clf_method == "svm_poly":
         clf = SVC(kernel="poly", random_state=random_state)
@@ -238,14 +239,14 @@ def get_classifier(clf_method, random_state=1):
     elif clf_method == "random_forest":
         clf = RandomForestClassifier(random_state=random_state)
         param_grid = dict(
-            n_estimators=[10, 25, 50],
-            max_features=["auto", "sqrt", "log2"],
-            max_depth=[3]
+            n_estimators=[10, 15, 25, 40],
+            max_features=["sqrt", "log2"],
+            max_depth=[2, 3]
         )
     elif clf_method == "extra_trees":
         clf = ExtraTreesClassifier(random_state=random_state)
         param_grid = dict(
-            n_estimators=[10, 20, 25, 30, 40],
+            n_estimators=[10, 20, 30, 40],
             max_depth=[2, 3, 5]
         )
     elif clf_method == "gaussian_nb":
