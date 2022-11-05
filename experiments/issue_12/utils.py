@@ -1,5 +1,4 @@
 from pathlib import Path
-
 import mne
 import numpy as np
 import pandas as pd
@@ -85,48 +84,6 @@ class PSD(BaseEstimator):
         band_spectras = np.concatenate(band_spectras, axis=2)
 
         return band_spectras
-
-
-def whitening(X, B=None):
-    is_epochs = isinstance(X, mne.Epochs)
-    if is_epochs:
-        epochs = X.copy()
-        X = X._data
-        n_epochs, n_channels, n_times = X.shape
-        X = X.transpose(1, 0, 2).reshape(n_channels, -1)
-
-    if B is None:
-
-        n, T = X.shape
-
-        X -= X.mean(axis=1, keepdims=1)
-
-        [D, U] = eig((X @ X.T) / float(T))
-        # Sort by increasing variances
-        k = D.argsort()
-        Ds = D[k]
-
-        # The m most significant princip. comp. by decreasing variance
-        PCs = np.arange(n - 1, - 1, -1)
-
-        # PCA
-        # At this stage, B does the PCA on m components
-        B = U[:, k[PCs]].T
-
-        # --- Scaling ---------------------------------
-        # The scales of the principal components
-        scales = np.sqrt(Ds[PCs])
-        B = np.diag(1.0 / scales) * B
-        # Sphering
-
-    X = B @ X
-
-    if is_epochs:
-        X = X.reshape(n_channels, n_epochs, n_times).transpose(1, 0, 2)
-        epochs._data = X
-        X = epochs
-
-    return X, B
 
 
 # LOADING
@@ -242,71 +199,93 @@ def extract_subject_id(s):
     return int(s[1:-1])
 
 
-def get_classifier(clf_method, n_inputs=10, random_state=1):
+def get_classifier(clf_method, random_state=1):
     if clf_method == "lda":
         clf = LinearDiscriminantAnalysis(n_components=1, solver="svd")
-        param_grid = dict()
+        param_grid = dict(
+            n_components=[1, 2, 3]
+        )
     elif clf_method == "svm_rbf":
         clf = SVC(kernel="rbf", random_state=random_state)
         param_grid = dict(
-            C=np.logspace(-1, 3, 5),
-            gamma=np.logspace(-1, -3, 4)
+            C=np.logspace(-1, 3, 6),
+            gamma=np.logspace(-1, -3, 5)
         )
     elif clf_method == "svm_linear":
         clf = SVC(kernel="linear", random_state=random_state)
         param_grid = dict(
-            C=np.logspace(-1, 3, 10)
+            C=np.logspace(-2, 4, 10)
         )
     elif clf_method == "svm_poly":
         clf = SVC(kernel="poly", random_state=random_state)
         param_grid = dict(
-            C=np.logspace(-1, 3, 5),
+            C=np.logspace(-1, 3, 6),
             gamma=np.logspace(-1, -3, 4),
             degree=[2, 3]
         )
     elif clf_method == "svm_sigmoid":
         clf = SVC(kernel="sigmoid", C=1, random_state=random_state)
         param_grid = dict(
-            C=np.logspace(-1, 3, 5),
-            gamma=np.logspace(-1, -3, 5)
+            C=np.logspace(-1, 3, 6),
+            gamma=np.logspace(-1, -3, 6)
         )
     elif clf_method == "knn":
         clf = KNeighborsClassifier()
         param_grid = dict(
             n_neighbors=[2, 4, 6, 8, 10],
-            weights=["uniform", "distance"]
+            weights=["uniform", "distance11"]
         )
     elif clf_method == "random_forest":
         clf = RandomForestClassifier(random_state=random_state)
         param_grid = dict(
-            n_estimators=[5, 10, 20, 25, 30, 40],
+            n_estimators=[10, 25, 50],
             max_features=["auto", "sqrt", "log2"],
+            max_depth=[3]
         )
     elif clf_method == "extra_trees":
         clf = ExtraTreesClassifier(random_state=random_state)
         param_grid = dict(
-            n_estimators=[5, 10, 20, 25, 30, 40]
+            n_estimators=[10, 20, 25, 30, 40],
+            max_depth=[2, 3, 5]
         )
     elif clf_method == "gaussian_nb":
         clf = GaussianNB()
         param_grid = dict()
     elif clf_method == "mlp":
-        clf = MLPClassifier(validation_fraction=0.2, random_state=random_state, max_iter=2500)
+        clf = MLPClassifier(random_state=random_state, max_iter=5000, validation_fraction=0.25)
         param_grid = dict(
             hidden_layer_sizes=[
                 (),
-                (n_inputs // 2,),
-                (n_inputs // 4),
-                (n_inputs // 4, n_inputs // 4),
+                (10, ),
+                (6, ),
+                (4, ),
+                (10, 6),
+                (6, 4),
+                (4, 4),
             ],
-            activation=["relu", "logistic"]
+            activation=["relu", "logistic"],
+            # solver=["adam", "sgd"],
+        )
+    elif clf_method == "logistic_l2":
+        clf = LogisticRegression(random_state=random_state, max_iter=3000)
+        param_grid = dict(
+            C=np.logspace(-2, 3, 20),
+            penalty=["l2"],
+            fit_intercept=[True]
+        )
+    elif clf_method == "logistic_l1":
+        clf = LogisticRegression(random_state=random_state, max_iter=3000)
+        param_grid = dict(
+            C=np.logspace(-2, 3, 20),
+            penalty=["l1"],
+            solver=["liblinear"],
+            fit_intercept=[True]
         )
     elif clf_method == "logistic":
-        clf = LogisticRegression(random_state=random_state, max_iter=2000)
+        clf = LogisticRegression(random_state=random_state, max_iter=3000)
         param_grid = dict(
-            C=np.logspace(0, 3, 10),
-            penalty=["l2", "none"],
-            fit_intercept=[True, False]
+            penalty=["none"],
+            fit_intercept=[True]
         )
     else:
         raise Exception("Unknown classifier method: {}".format(clf_method))
