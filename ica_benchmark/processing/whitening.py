@@ -52,7 +52,11 @@ class Whitening(TransformerMixin, BaseEstimator):
         pass
 
     def fit(self, X):
+        """Whitening
 
+        Args:
+            X (np.ndarray): (n_times, n_channels)
+        """
         self.W = whitening_multivar(X.T)
         self.is_fitted_ = True
 

@@ -34,6 +34,8 @@ _ica_kwargs_dict = {
     "picard": _get_kwargs("picard", is_extended=False),
     "ext_infomax": _get_kwargs("infomax", is_extended=True),
     "picard_o": dict(method="picard", fit_params=dict(extended=True, ortho=True)),
+    "whitening": _get_kwargs("whitening"),
+    "pca": _get_kwargs("pca"),
 }
 
 
@@ -53,7 +55,12 @@ _sobi_kwargs_dict = {"sobi": dict(lags=100)}
 
 
 _all_methods = list(
-    {**_ica_kwargs_dict, **_coro_kwargs_dict, **_jade_kwargs_dict, **_sobi_kwargs_dict}
+    {
+        **_ica_kwargs_dict,
+        **_coro_kwargs_dict,
+        **_jade_kwargs_dict,
+        **_sobi_kwargs_dict
+    }
 )
 
 
@@ -179,6 +186,13 @@ class CustomICA(ICA):
             self.unmixing_matrix_ = W
             self.n_iter_ = n_iter + 1  # picard() starts counting at 0
             del _, n_iter
+        elif self.method == "whitening":
+            self.pca_components_ = np.eye(self.pca_components_.shape[1])
+            self.unmixing_matrix_ = np.eye(data.shape[1])
+            self.n_iter = 1
+        elif self.method == "pca":
+            self.unmixing_matrix_ = np.eye(data.shape[1])
+            self.n_iter = 1
         elif self.method in _coro_kwargs_dict:
             kwargs = _coro_kwargs_dict[self.method]
             coroica_constructor = UwedgeICA if self.method != "coro" else CoroICA

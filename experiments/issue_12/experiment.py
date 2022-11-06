@@ -23,7 +23,7 @@ from utils import alg_rename, extract_subject_id
 
 
 def is_stochastic(ica_method, clf_method):
-    if ("orica" in ica_method) or (ica_method in ("sobi", "jade", "none", None)):
+    if ("orica" in ica_method) or (ica_method in ("sobi", "jade", "none", None, "pca", "whitening")):
         if clf_method in ("lda", "knn", "gaussian_nb"):
             return False
     return True
@@ -220,7 +220,7 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
             scoring=make_scorer(cohen_kappa_score, greater_is_better=True),
             error_score=-1,
             refit=True,
-            n_jobs=4,
+            n_jobs=3,
             verbose=0
         )
         fit_start = time.time()
@@ -262,7 +262,7 @@ if __name__ == "__main__":
     N_RUNS = 12
 
     deterministic_methods = ["none", "orica 0", "orica 1", "ext_infomax", "infomax", "sobi", "jade", "picard", "fastica", "picard_o"]
-    
+
     deterministic_results = dict()
 
     for filepath in filepaths:
@@ -287,4 +287,5 @@ if __name__ == "__main__":
         results_df.algorithm = results_df.algorithm.apply(alg_rename)
         results_df.uid = results_df.uid.apply(extract_subject_id)
 
-#        results_df.to_csv("results.csv", index=False)
+        results_df.to_csv("results.csv", index=False)
+
