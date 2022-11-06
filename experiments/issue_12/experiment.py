@@ -20,6 +20,29 @@ import random
 from utils import get_classifier, load_subject_epochs, PSD, ConcatenateChannelsPSD
 from utils import alg_rename, extract_subject_id
 
+from colorama import Fore, Style
+from itertools import cycle
+
+
+COLORS = [
+    Fore.BLUE,
+    Fore.CYAN,
+    Fore.GREEN,
+    Fore.MAGENTA,
+    Fore.RED,
+    Fore.BLACK,
+    Fore.WHITE,
+    Fore.YELLOW,    
+    Fore.LIGHTBLUE_EX,
+    Fore.LIGHTCYAN_EX,
+    Fore.LIGHTGREEN_EX,
+    Fore.LIGHTMAGENTA_EX,
+    Fore.LIGHTRED_EX,
+    Fore.LIGHTBLACK_EX,
+    Fore.LIGHTWHITE_EX,
+    Fore.LIGHTYELLOW_EX,
+]
+
 
 def is_ica_stochastic(ica_method):
     return not(
@@ -79,6 +102,17 @@ def get_PSD(data, sfreq=250, len_size=250):
 def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, random_state=1):
     np.random.seed(random_state)
     random.seed(random_state)
+
+    ica_method_color_dict = {
+        ica_method: color
+        for ica_method, color
+        in zip(ica_methods, cycle(COLORS))
+    }
+    clf_method_color_dict = {
+        clf_method: color
+        for clf_method, color
+        in zip(clf_methods, cycle(COLORS))
+    }
 
     ica_methods = ica_methods or [None]
     clf_methods = clf_methods or ["lda"]
@@ -207,20 +241,18 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
                 pp_end = time.time()
 
             for clf_method in clf_methods:
-                
+
                 if not is_stochastic(ica_method, clf_method) and n_run > 0:
                     # Save time
                     continue
-                
-                RED = '\033[0;31m'
-                NC = '\033[0m'
+
                 print(
-                    "[{}|{}:{}/{}]{}({})".format(
-                        ica_method,
-                        clf_method,
+                    "[{}|{} : {}/{}]{}({})".format(
+                        "{}{}{}".format(ica_method_color_dict[ica_method], ica_method, Style.RESET_ALL),
+                        "{}{}{}".format(clf_method_color_dict[clf_method], clf_method, Style.RESET_ALL),
                         n_run + 1,
                         n_runs,
-                        f" {RED}-NEW-{NC} " if refit_ica else "",
+                        f" {Fore.RED}-NEW-{Style.RESET_ALL} " if refit_ica else "",
                         "ND" if is_stochastic(ica_method, clf_method) else "D"
                     ),
                     end=""
@@ -304,4 +336,3 @@ if __name__ == "__main__":
         results_df.uid = results_df.uid.apply(extract_subject_id)
 
         results_df.to_csv("results.csv", index=False)
-
