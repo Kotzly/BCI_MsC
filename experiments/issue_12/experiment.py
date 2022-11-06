@@ -288,7 +288,7 @@ def run(filepath, ica_methods=None, clf_methods=None, channels=None, n_runs=10, 
                         cohen_kappa_score(y_test, pred),
                         fit_end - fit_start,
                         pp_end - pp_start,
-                        str({**gs_cv.best_params_, "selected_features": (SFS.support_.astype(int))})
+                        str({**gs_cv.best_params_, "selected_features": list(SFS.support_.astype(int))})
                     ]
                 )
                 n_selected_features = SFS.support_.sum()
