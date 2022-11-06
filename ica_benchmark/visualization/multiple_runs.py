@@ -131,6 +131,8 @@ def detailed_barplot(results_df, x_col="uid", hue_col="algorithm", val_col="Kapp
     ax.set_ylabel(val_col, fontsize=20)
     ax.set_title(f"{val_col} per {x_col}, per {hue_col}", fontsize=20)
 
+    # Ensure figure doesnt get cropped during save
+    fig.tight_layout()
     if save_filepath is not None:
         fig.savefig(save_filepath)
 
