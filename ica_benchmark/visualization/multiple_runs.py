@@ -52,7 +52,7 @@ def ranked_barplot(results_df, grouping_col="algorithm", x_col="uid", val_col="k
         fig.savefig(save_filepath)
     
 
-def detailed_barplot(results_df, x_col="uid", hue_col="algorithm", val_col="Kappa", order_col="run", save_filepath=None, w=5, cmap="tab10", x_label=None):
+def detailed_barplot(results_df, x_col="uid", hue_col="algorithm", val_col="Kappa", order_col="run", save_filepath=None, w=5, cmap="nipy_spectral", x_label=None):
     if x_label is None:
         x_label = x_col
 
@@ -118,12 +118,13 @@ def detailed_barplot(results_df, x_col="uid", hue_col="algorithm", val_col="Kapp
         x_c += w * 2
 
         mid = np.mean(x_list)
-        ax.text(mid, -0.1, x, horizontalalignment="center", fontsize=15)
+        ax.text(mid, -0.1, x, horizontalalignment="center", va="center_baseline", fontsize=15, rotation=-45)
     ax.set_xlabel(x_label, fontsize=20)
 
     for loc in ["right", "left", "top", "bottom"]:
         ax.spines[loc].set_visible(False)
     ax.set_xticks([])
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, fontsize=12)
     ax.set_yticks(np.arange(0, 1.01, 0.1))
     ax.grid()
     ax.legend(handles=legends, loc=(1, .2), fontsize=15)
@@ -134,7 +135,7 @@ def detailed_barplot(results_df, x_col="uid", hue_col="algorithm", val_col="Kapp
         fig.savefig(save_filepath)
 
 
-def average_barplot(results_df, x_col="algorithm", grouping_col="uid", val_col="Kappa", order_col="run", save_filepath=None, w=5, cmap="tab10", x_label=None, n_boots=N_BOOT):
+def average_barplot(results_df, x_col="algorithm", grouping_col="uid", val_col="Kappa", order_col="run", save_filepath=None, w=5, cmap="nipy_spectral", x_label=None, n_boots=N_BOOT):
     if x_label is None:
         x_label = x_col
 
@@ -248,7 +249,7 @@ if __name__ == "__main__":
         "-path",
         "--p",
         dest="path",
-        default="/home/paulo/Documents/GIT/BCI_MsC/experiments/issue_12_complete/results.csv", 
+        default="/home/paulo/Documents/GIT/BCI_MsC/experiments/issue_12/results.csv",
         type=Path,
         help="Path to results.csv"
     )
@@ -287,10 +288,10 @@ if __name__ == "__main__":
             order_col="run",
             save_filepath=results_folder / f"detailed_{classifier}.png",
             w=5,
-            cmap="tab10",
+            cmap="nipy_spectral",
             x_label=None
         )
-    
+
     for algorithm in algorithms:
         ranked_barplot(
             results_df.query("algorithm == @algorithm"),
@@ -299,7 +300,7 @@ if __name__ == "__main__":
             grouping_col="classifier",
             save_filepath=results_folder / f"{algorithm}.png"
         )
-        
+
         detailed_barplot(
             results_df.query("algorithm == @algorithm"),
             x_col="uid",
@@ -308,10 +309,10 @@ if __name__ == "__main__":
             order_col="run",
             save_filepath=results_folder / f"detailed_{algorithm}.png",
             w=5,
-            cmap="tab10",
+            cmap="nipy_spectral",
             x_label=None
         )
-    
+
     for algorithm in algorithms:
         
         detailed_barplot(
@@ -322,6 +323,6 @@ if __name__ == "__main__":
             order_col="run",
             save_filepath=results_folder / f"classifier_comparison_{algorithm}.png",
             w=5,
-            cmap="tab10",
+            cmap="nipy_spectral",
             x_label=None
         )
