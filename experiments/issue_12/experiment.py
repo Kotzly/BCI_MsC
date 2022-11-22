@@ -307,7 +307,7 @@ if __name__ == "__main__":
     clf_methods = ["mlp", "random_forest", "extra_trees", "gaussian_nb", "lda", "svm_sigmoid", "svm_poly", "svm_linear", "svm_rbf", "logistic_l2", "logistic_l1", "logistic"]
 
     filepaths = list(sorted(root.glob("A*T.gdf")))
-    N_RUNS = 12
+    N_RUNS = 25
 
     deterministic_methods = ["none", "orica 0", "orica 1", "ext_infomax", "infomax", "sobi", "jade", "picard", "fastica", "picard_o", "whitening", "pca"]
 
