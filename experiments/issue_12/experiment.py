@@ -61,6 +61,7 @@ def is_stochastic(ica_method, clf_method):
 def repeat_deterministic(results_df, times=1):
     original_df = results_df.copy()
     results_df = results_df.copy()
+    results_df["duplicated"] = 0
     keys = ["algorithm", "classifier"]
 
     non_repeated = original_df.groupby(keys, as_index=False).nunique().query("run == 1")
@@ -70,6 +71,7 @@ def repeat_deterministic(results_df, times=1):
             if i == sliced_df.run.unique().item():
                 continue
             sliced_df.loc[:, ["run"]] = i
+            sliced_df.loc[:, ["duplicated"]] = 1
             results_df = pd.concat([results_df, sliced_df], axis=0)
     return results_df.reset_index(drop=True)
 
