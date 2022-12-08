@@ -214,8 +214,8 @@ class BCI_IV_Comp_Dataset(Dataset):
 class OpenBMI_Dataset(Dataset):
 
     EVENT_MAP_DICT = {
-        "0": 0,
-        "1": 1,
+        "1": 0,
+        "2": 1,
     }
     UNKNOWN_EVENT_MAP_DICT = {}
 
