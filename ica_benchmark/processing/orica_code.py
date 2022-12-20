@@ -3,17 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 from collections import namedtuple
-# This solves mpl foor loop memory leak for some reason
 import matplotlib
 from scipy.stats import pearsonr as pcc
 
+
 adaptative_constants = namedtuple("adaptative_constants", ["a", "b", "sigmarn"])
 
-DEBUG = True
-
-def log(string):
-    if DEBUG:
-        print(string)
 
 def match_corr(eeg, eog):
     corr_m = list()
@@ -98,11 +93,11 @@ def update_m(x, m, lambdas=.005):
     # [TODO] Check if it is possible to no use the median value, and use the full array
     # i.e. `l = 1 - lambdas`
 
-    l_avg = 1 - lambdas[len(lambdas) // 2 - 1] # In code
-    l = l_avg#1 - lambdas
+    l_avg = 1 - lambdas[len(lambdas) // 2 - 1]  # In code
+    l = l_avg  # 1 - lambdas
     # l = 1 - lambdas
 
-    Q = l / (1 - l) + np.trace(v.T @ v) / n_p # In code
+    Q = l / (1 - l) + np.trace(v.T @ v) / n_p  # In code
     # Q = (l / (1 - l) + np.diag(v.T @ v)).sum() / n_p
 
     # Division by n_p to normalize the block-wide v @ v.T multiplication]
@@ -136,6 +131,7 @@ def update_w_block(v, w, lambdas=None, n_sub=1):
     w = lambda_prod * (w - y @ np.diag(lambdas / Q) @ fy.T @ w)
     w = orthogonalize(w)
     return w
+
 
 def update_w_block_paper(v, w, lambdas=None, n_sub=1):
     # Online Recursive ICA Algorithm Used for Motor Imagery EEG Signal
@@ -177,10 +173,10 @@ class ORICA(BaseEstimator):
         "constant",
         # Tracking Non-stationary EEG Sources using Adaptive Online Recursive Independent Component Analysis
         "adaptative",
-        #"adaptative_exp",
+        # "adaptative_exp",
         # Tracking Non-stationary EEG Sources using Adaptive Online Recursive Independent Component Analysis
         "decay",
-        #"pid"
+        # "pid"
     )
 
     def __init__(self, n_channels=6, size_block=4, block_update=False, stride=1, mode=None, lm_0=None, lw_0=None, gamma=None, adaptative_constants=None, n_passes=1, adap_exp_norm=1e4, tau_const=np.inf, n_sub=1):
@@ -200,13 +196,13 @@ class ORICA(BaseEstimator):
         self.tau_const = tau_const
         self.I = np.eye(n_channels)
         self.init()
-    
+
     def init(self):
         if self.mode is None:
             self.mode = "constant"
 
         assert self.mode in self.SUPPORTED_MODES
-        self.lambda_const = 1-np.exp(-1/(self.tau_const))
+        self.lambda_const = 1 - np.exp(-1 / (self.tau_const))
         if self.gamma is None:
             self.gamma = 0.6
 
@@ -221,7 +217,7 @@ class ORICA(BaseEstimator):
             # self.adaptative_constants = adaptative_constants(.03, .012, 0.05)
             # MYCHANGE
             self.adaptative_constants = adaptative_constants(.03, .012, 0.05)
-        
+
         self.w_0 = self.m_0 = self.I
         self.w = None
         self.m = None
@@ -322,13 +318,13 @@ class ORICA(BaseEstimator):
 
         elif self.mode == "adaptative_exp":
             sigma = self.NSI(y)
-            l = 1 - np.exp(- sigma / self.adap_exp_norm)
-            lm, lw = l, l
+            ll = 1 - np.exp(- sigma / self.adap_exp_norm)
+            lm, lw = ll, ll
 
         assert not any(np.isnan(lm))
         assert not any(np.isnan(lw))
-    
-        return lm , lw, sigma
+
+        return lm, lw, sigma
 
     def fit(self, x, y=None):
         pass
@@ -336,7 +332,6 @@ class ORICA(BaseEstimator):
 
     def transform_(self, X, warm_start=False):
         X_filtered = X.copy()
-        
 
         if not warm_start:
             self.m = self.m_0
@@ -400,7 +395,7 @@ class ORICA(BaseEstimator):
 
                 self.lambdas.append(lw.mean())
                 self.sigmas.append(sigma)
-            
+
                 counter += self.stride
 
             if ((i % 100) < self.stride) and save:
@@ -410,7 +405,7 @@ class ORICA(BaseEstimator):
                 fig.savefig("./m/img_{}.png".format(str(im_cnt).rjust(5, "0")))
                 plt.close(fig)
                 del fig
-                
+
                 fig = plt.figure(figsize=(9, 9))
                 plt.imshow(self.w)
                 plt.colorbar()
@@ -424,13 +419,12 @@ class ORICA(BaseEstimator):
                 fig.savefig("./c/img_{}.png".format(str(im_cnt).rjust(5, "0")))
                 plt.close(fig)
                 del fig
-                
+
                 plt.close("all")
                 im_cnt += 1
 
         matplotlib.use(orig_mpl_backend)
         return X_filtered
-
 
     def transform_epochs(self, X, warm_start=False, scaling=1, save=False, verbose=True):
         orig_mpl_backend = matplotlib.get_backend()
@@ -451,15 +445,10 @@ class ORICA(BaseEstimator):
         self.lambdas = [self.lw_0]
         self.sigmas = list()
         im_cnt = 0
-        counter = 0
-        epoch_iter = range(n_epochs)
-        if verbose:
-            epoch_iter = tqdm(epoch_iter)
-        for e in epoch_iter:
+
+        for e in tqdm(range(n_epochs)):
             window_iter = range(self.size_block, n_times + self.stride, self.stride)
-            if verbose:
-                window_iter = tqdm(window_iter, leave=False)
-            for i in window_iter:
+            for i in tqdm(window_iter, leave=False):
                 X_i = X[e, :, i - self.size_block:i]
                 n_p = X_i.shape[1]
                 for n_pass in range(self.n_passes):
@@ -479,7 +468,7 @@ class ORICA(BaseEstimator):
                     self.sigmas.append(sigma)
 
                     counter += self.stride
-                
+
                 if ((i % 100) < self.stride) and save:
                     fig = plt.figure(figsize=(9, 9))
                     plt.imshow(self.m)
@@ -487,7 +476,7 @@ class ORICA(BaseEstimator):
                     fig.savefig("./m/img_{}.png".format(str(im_cnt).rjust(5, "0")))
                     plt.close(fig)
                     del fig
-                    
+
                     fig = plt.figure(figsize=(9, 9))
                     plt.imshow(self.w)
                     plt.colorbar()
@@ -501,7 +490,7 @@ class ORICA(BaseEstimator):
                     fig.savefig("./c/img_{}.png".format(str(im_cnt).rjust(5, "0")))
                     plt.close(fig)
                     del fig
-                    
+
                     plt.close("all")
                     im_cnt += 1
 
@@ -525,10 +514,9 @@ if __name__ == "__main__":
     X, sources, W = sample_ica_data(N=1000, seed=100)
 
     ica = ORICA(mode="decay", block_update=True, size_block=8, stride=8, gamma=0.6, lm_0=.995, lw_0=.995)
-    
-    # ica.fit(X)
+
     X_filtered = ica.transform(X)
-    
+
     plot_various(X, d=1, figsize=(20, 4), title="Raw")
 
     plot_various(np.linalg.pinv(W) @ X, d=1, figsize=(20, 4), n=4, title="Estimated sources from W real")
