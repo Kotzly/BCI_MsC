@@ -53,6 +53,7 @@ class Dataset(ABC):
             preload=preload,
             eog=cls.EOG_CHANNELS,
             exclude=list() if load_eog else cls.EOG_CHANNELS,
+            verbose=0
         )
 
         return raw_obj
@@ -292,11 +293,11 @@ class Physionet_2009_Dataset(Dataset):
     EVENT_MAP_DICT = {
         str(i): i
         for i in range(12)
-        if i not in [9, ]  # There is no "9" annotation, as it can be seen in TASK_EVENT_REMAPPINGS
+        if i not in [9, ]  # There is no "9" annotation, as it can be seen in ANNOTATION_REMAPPING
     }
 
     # Map the task number, defined in TRIAL_INFO_DF, to the EVENT_ID mappings
-    TASK_EVENT_REMAPPINGS = {
+    ANNOTATION_REMAPPING = {
         # Each dict maps the original annotation string to a new annotation string,
         # which is unique amongst all trials, as in the original dataset the T1 and T2
         # annotations were used for multiple tasks
@@ -391,7 +392,7 @@ class Physionet_2009_Dataset(Dataset):
         trial = filepath_info["trial"]
         task = cls.task_from_trial(trial)
         raw = read_raw_edf(filepath, **kwargs)
-        raw.annotations.rename(cls.TASK_EVENT_REMAPPINGS[task])
+        raw.annotations.rename(cls.ANNOTATION_REMAPPING[task])
         return raw
 
     def __init__(self, dataset_path, test_folder=None):
