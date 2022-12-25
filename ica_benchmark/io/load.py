@@ -21,7 +21,6 @@ class class_or_instancemethod(classmethod):
 
 
 class Dataset(ABC):
-
     def __init__(self, dataset_path):
         self.dataset_path = Path(dataset_path)
 
@@ -53,13 +52,22 @@ class Dataset(ABC):
             preload=preload,
             eog=cls.EOG_CHANNELS,
             exclude=list() if load_eog else cls.EOG_CHANNELS,
-            verbose=verbose
+            verbose=verbose,
         )
 
         return raw_obj
 
     @classmethod
-    def load_as_epochs(cls, filepath, tmin=-.3, tmax=.7, reject=None, load_eog=False, has_labels=True, verbose=None):
+    def load_as_epochs(
+        cls,
+        filepath,
+        tmin=-0.3,
+        tmax=0.7,
+        reject=None,
+        load_eog=False,
+        has_labels=True,
+        verbose=None,
+    ):
         # Default value of MNE is to not reject but default from
         # this class is using the REJECT_MAGNITUDE dict
 
@@ -68,8 +76,14 @@ class Dataset(ABC):
         elif reject is False:
             reject = None
 
-        raw_obj = cls.load_as_raw(filepath, preload=True, load_eog=load_eog, verbose=verbose)
-        events, _ = events_from_annotations(raw_obj, event_id=cls.EVENT_MAP_DICT if has_labels else cls.UNKNOWN_EVENT_MAP_DICT)
+        raw_obj = cls.load_as_raw(
+            filepath, preload=True, load_eog=load_eog, verbose=verbose
+        )
+        events, _ = events_from_annotations(
+            raw_obj,
+            event_id=cls.EVENT_MAP_DICT if has_labels else cls.UNKNOWN_EVENT_MAP_DICT,
+            verbose=verbose,
+        )
 
         epochs = Epochs(
             raw_obj,
@@ -80,6 +94,7 @@ class Dataset(ABC):
             tmax=tmax,
             reject=reject,
             baseline=None,
+            verbose=verbose
             # proj=False
         )
         return epochs
@@ -92,9 +107,7 @@ class Dataset(ABC):
 
     @classmethod
     def read_metadata_from_raw(cls, raw):
-        return cls._parse_info(
-            raw._raw_extras[0]["subject_info"]
-        )
+        return cls._parse_info(raw._raw_extras[0]["subject_info"])
 
     @classmethod
     def read_metadata(cls, filepath):
@@ -112,14 +125,23 @@ class Dataset(ABC):
         return obj, metadata
 
     @classmethod
-    def load_from_filepaths(cls, filepaths, as_epochs=True, concatenate=False, return_metadata=False, **load_kwargs):
+    def load_from_filepaths(
+        cls,
+        filepaths,
+        as_epochs=True,
+        concatenate=False,
+        return_metadata=False,
+        **load_kwargs
+    ):
 
         concatenate_fn = concatenate_epochs if as_epochs else concatenate_raws
 
         objs = list()
         metadata = list()
         for filepath in filepaths:
-            obj, metadata = cls.load_from_filepath(filepath, as_epochs=as_epochs, **load_kwargs)
+            obj, metadata = cls.load_from_filepath(
+                filepath, as_epochs=as_epochs, **load_kwargs
+            )
             objs.append(obj)
             metadata.append(metadata)
 
@@ -179,10 +201,7 @@ class BCI_IV_Comp_Dataset(Dataset):
         self.test_folder = Path(self.test_folder)
 
     def get_uid_filename(self, uid, train=False):
-        return "A{}{}.gdf".format(
-            str(uid).rjust(2, "0"),
-            "T" if train else "E"
-        )
+        return "A{}{}.gdf".format(str(uid).rjust(2, "0"), "T" if train else "E")
 
     def uid_from_filepath(self, filepath):
         return re.search("A0([0-9])[ET].gdf", filepath.name).group(1)
@@ -190,26 +209,27 @@ class BCI_IV_Comp_Dataset(Dataset):
     def list_subject_filepaths(self) -> pd.DataFrame:
         filepaths = self.dataset_path.glob("A*.gdf")
         filepaths_list = [
-            (
-                str(filepath),
-                "T" in filepath.name,
-                self.uid_from_filepath(filepath)
-            )
-            for filepath
-            in filepaths
+            (str(filepath), "T" in filepath.name, self.uid_from_filepath(filepath))
+            for filepath in filepaths
         ]
         filepath_df = pd.DataFrame(filepaths_list, columns=["path", "train", "uid"])
         return filepath_df
 
     def load_subject(self, uid, train=False, **kwargs):
         filepaths_df = self.list_subject_filepaths()
-        filepath = filepaths_df.query("uid == @uid").query("train == @train").path.item()
-        epochs, _ = self.load_from_filepath(filepath, as_epochs=True, has_labels=train, **kwargs)
+        filepath = (
+            filepaths_df.query("uid == @uid").query("train == @train").path.item()
+        )
+        epochs, _ = self.load_from_filepath(
+            filepath, as_epochs=True, has_labels=train, **kwargs
+        )
         if train:
             events = epochs.events[:, 2].flatten()
         else:
             test_label_filepath = self.test_folder / "A0{}E.csv".format(uid)
-            events = pd.read_csv(test_label_filepath, header=None).to_numpy().flatten() - 1
+            events = (
+                pd.read_csv(test_label_filepath, header=None).to_numpy().flatten() - 1
+            )
             epochs.events[:, 2] = events
         return epochs, events
 
@@ -225,12 +245,7 @@ class OpenBMI_Dataset(Dataset):
 
     REJECT_MAGNITUDE = 1e-3
 
-    SUBJECT_INFO_KEYS = [
-        'id',
-        'sex',
-        'birthday',
-        'name'
-    ]
+    SUBJECT_INFO_KEYS = ["id", "sex", "birthday", "name"]
 
     FILE_LOADER_FN = read_raw_edf
 
@@ -247,17 +262,21 @@ class OpenBMI_Dataset(Dataset):
                 str(filepath),
                 "train" in filepath.name,
                 int(filepath.parts[-2][-1]),
-                self.uid_from_filepath(filepath)
+                self.uid_from_filepath(filepath),
             )
-            for filepath
-            in filepaths
+            for filepath in filepaths
         ]
-        filepath_df = pd.DataFrame(filepaths_list, columns=["path", "train", "session", "uid"])
+        filepath_df = pd.DataFrame(
+            filepaths_list, columns=["path", "train", "session", "uid"]
+        )
         return filepath_df
 
     def _validate_session(self, session):
         if session is None:
-            warn("Using session 1, as you did not pass the session argument. Using the first session, but you can choose either 1 or 2.", DefaultSessionWarning)
+            warn(
+                "Using session 1, as you did not pass the session argument. Using the first session, but you can choose either 1 or 2.",
+                DefaultSessionWarning,
+            )
             session = 1
         return session
 
@@ -267,8 +286,7 @@ class OpenBMI_Dataset(Dataset):
 
         filepaths_df = self.list_subject_filepaths()
         filepath = (
-            filepaths_df
-            .query("uid == @uid")
+            filepaths_df.query("uid == @uid")
             .query("train == @train")
             .query("session == @session")
             .path.item()
@@ -287,13 +305,16 @@ class Physionet_2009_Dataset(Dataset):
         1: "each_fist_execution",
         2: "each_fist_imagery",
         3: "both_fist_execution",
-        4: "both_fist_imagery"
+        4: "both_fist_imagery",
     }
 
     EVENT_MAP_DICT = {
         str(i): i
         for i in range(12)
-        if i not in [9, ]  # There is no "9" annotation, as it can be seen in ANNOTATION_REMAPPING
+        if i
+        not in [
+            9,
+        ]  # There is no "9" annotation, as it can be seen in ANNOTATION_REMAPPING
     }
 
     # Map the task number, defined in TRIAL_INFO_DF, to the EVENT_ID mappings
@@ -303,32 +324,28 @@ class Physionet_2009_Dataset(Dataset):
         # annotations were used for multiple tasks
         #
         # Keys -> Values: Tasks -> Annotation to Label remapping
-        "10": {
-            "T0": "10"  # Rest in Baseline, eyes open
-        },
-        "11": {
-            "T0": "11"  # Rest in Baseline, eyes closed
-        },
+        "10": {"T0": "10"},  # Rest in Baseline, eyes open
+        "11": {"T0": "11"},  # Rest in Baseline, eyes closed
         "1": {
             "T0": "0",  # Rest
             "T1": "1",  # Left, execution
-            "T2": "2"   # Right, execution
+            "T2": "2",  # Right, execution
         },
         "2": {
             "T0": "0",  # Rest
             "T1": "3",  # Left, imagination
-            "T2": "4"   # Right, imagination
+            "T2": "4",  # Right, imagination
         },
         "3": {
             "T0": "0",  # Rest
             "T1": "5",  # Both fists, execution
-            "T2": "6"   # Both feet, execution
+            "T2": "6",  # Both feet, execution
         },
         "4": {
             "T0": "0",  # Rest
             "T1": "7",  # Both fists, imagery
-            "T2": "8"   # Both feet, imagery
-        }
+            "T2": "8",  # Both feet, imagery
+        },
     }
 
     # The trial number refers to the 'run', as defined in the dataset documentation page
@@ -366,12 +383,7 @@ class Physionet_2009_Dataset(Dataset):
 
     REJECT_MAGNITUDE = 1e-4
 
-    SUBJECT_INFO_KEYS = [
-        'id',
-        'sex',
-        'birthday',
-        'name'
-    ]
+    SUBJECT_INFO_KEYS = ["id", "sex", "birthday", "name"]
 
     # [TODO] This @classmethod followd by @property is a usual thing to do,
     # so maybe it would be better to change it?
@@ -382,8 +394,12 @@ class Physionet_2009_Dataset(Dataset):
             [
                 [1, "baseline_open", "10"],
                 [2, "baseline_closed", "11"],
-            ] + [[i, cls.TASK_DICT[(i - 3) % 4 + 1], str((i - 3) % 4 + 1)] for i in range(3, 14 + 1)],
-            columns=["trial", "short_description", "task"]
+            ]
+            + [
+                [i, cls.TASK_DICT[(i - 3) % 4 + 1], str((i - 3) % 4 + 1)]
+                for i in range(3, 14 + 1)
+            ],
+            columns=["trial", "short_description", "task"],
         )
 
     @classmethod
@@ -420,21 +436,25 @@ class Physionet_2009_Dataset(Dataset):
     def list_subject_filepaths(self) -> pd.DataFrame:
         filepaths = self.dataset_path.glob("**/*.edf")
         filepaths_list = [
-            (
-                str(filepath),
-                *self.parse_filepath_info(filepath).values()
-            )
-            for filepath
-            in filepaths
+            (str(filepath), *self.parse_filepath_info(filepath).values())
+            for filepath in filepaths
         ]
-        filepath_df = pd.DataFrame(filepaths_list, columns=["path", "uid", "trial", "task"])
+        filepath_df = pd.DataFrame(
+            filepaths_list, columns=["path", "uid", "trial", "task"]
+        )
         return filepath_df
 
     @classmethod
     def _check_tasks(self, tasks):
         assert isinstance(tasks, (list, tuple)), "Tasks must be a list of tasks"
-        assert all([isinstance(task, str) for task in tasks]), "The tasks must be strings!"
-        assert all([task in self.TASKS for task in tasks]), "You passed a invalid task, the possible tasks are: {}".format(", ".join(self.TASKS))
+        assert all(
+            [isinstance(task, str) for task in tasks]
+        ), "The tasks must be strings!"
+        assert all(
+            [task in self.TASKS for task in tasks]
+        ), "You passed a invalid task, the possible tasks are: {}".format(
+            ", ".join(self.TASKS)
+        )
 
     def load_subject(self, uid, tasks=None, trials=None, **kwargs):
         tasks = tasks or self.TASKS
@@ -443,8 +463,7 @@ class Physionet_2009_Dataset(Dataset):
 
         filepaths_df = self.list_subject_filepaths()
         filepaths = (
-            filepaths_df
-            .query("uid == @uid")
+            filepaths_df.query("uid == @uid")
             .query("task in @tasks")
             .query("trial in @trials")
             .path.apply(Path)
