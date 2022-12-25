@@ -4,9 +4,14 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 import pandas as pd
 import re
+from warnings import warn
 
 
 PRELOAD = False
+
+
+class DefaultSessionWarning(Warning):
+    pass
 
 
 class class_or_instancemethod(classmethod):
@@ -42,21 +47,21 @@ class Dataset(ABC):
 
     @classmethod
     def load_as_raw(cls, filepath, load_eog=False, preload=False):
-        
+
         raw_obj = cls.FILE_LOADER_FN(
             filepath,
             preload=preload,
             eog=cls.EOG_CHANNELS,
             exclude=list() if load_eog else cls.EOG_CHANNELS,
         )
-    
+
         return raw_obj
-    
+
     @classmethod
     def load_as_epochs(cls, filepath, tmin=-.3, tmax=.7, reject=None, load_eog=False, has_labels=True):
         # Default value of MNE is to not reject but default from
         # this class is using the REJECT_MAGNITUDE dict
-        
+
         if reject is None:
             reject = dict(eeg=cls.REJECT_MAGNITUDE)
         elif reject is False:
@@ -64,7 +69,7 @@ class Dataset(ABC):
 
         raw_obj = cls.load_as_raw(filepath, preload=True, load_eog=load_eog)
         events, _ = events_from_annotations(raw_obj, event_id=cls.EVENT_MAP_DICT if has_labels else cls.UNKNOWN_EVENT_MAP_DICT)
-        
+
         epochs = Epochs(
             raw_obj,
             events,
@@ -214,6 +219,7 @@ class OpenBMI_Dataset(Dataset):
         "1": 0,
         "2": 1,
     }
+
     UNKNOWN_EVENT_MAP_DICT = {}
 
     REJECT_MAGNITUDE = 1e-3
@@ -248,7 +254,16 @@ class OpenBMI_Dataset(Dataset):
         filepath_df = pd.DataFrame(filepaths_list, columns=["path", "train", "session", "uid"])
         return filepath_df
 
-    def load_subject(self, uid, session, train=False, **kwargs):
+    def _validate_session(self, session):
+        if session is None:
+            warn("Using session 1, as you did not pass the session argument. Using the first session, but you can choose either 1 or 2.", DefaultSessionWarning)
+            session = 1
+        return session
+
+    def load_subject(self, uid, session=None, train=False, **kwargs):
+
+        session = self._validate_session(session)
+
         filepaths_df = self.list_subject_filepaths()
         filepath = (
             filepaths_df
@@ -286,11 +301,13 @@ class Physionet_2009_Dataset(Dataset):
         # which is unique amongst all trials, as in the original dataset the T1 and T2
         # annotations were used for multiple tasks
         #
-        # Tasks -> Labels
-        # Rest in Baseline, eyes open
-        "10": {"T0": "10"},
-        # Rest in Baseline, eyes closed
-        "11": {"T0": "11"},
+        # Keys -> Values: Tasks -> Annotation to Label remapping
+        "10": {
+            "T0": "10"  # Rest in Baseline, eyes open
+        },
+        "11": {
+            "T0": "11"  # Rest in Baseline, eyes closed
+        },
         "1": {
             "T0": "0",  # Rest
             "T1": "1",  # Left, execution
@@ -381,14 +398,14 @@ class Physionet_2009_Dataset(Dataset):
         super(Physionet_2009_Dataset, self).__init__(dataset_path)
         self.test_folder = test_folder or self.dataset_path
         self.test_folder = Path(self.test_folder)
-    
+
     @classmethod
     def task_from_trial(cls, trial):
         return cls.TRIAL_INFO_DF.query("trial == @trial").task.item()
-    
+
     @classmethod
     def parse_filepath_info(cls, filepath):
-        pattern = re.compile("S(?P<uid>[0-9]{3})R(?P<trial>[0-9]{2})") 
+        pattern = re.compile("S(?P<uid>[0-9]{3})R(?P<trial>[0-9]{2})")
         info = pattern.match(filepath.name).groupdict()
         info = {k: str(int(v)) for k, v in info.items()}
         info["trial"] = int(info["trial"])
