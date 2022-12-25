@@ -46,20 +46,20 @@ class Dataset(ABC):
         raise NotImplementedError
 
     @classmethod
-    def load_as_raw(cls, filepath, load_eog=False, preload=False):
+    def load_as_raw(cls, filepath, load_eog=False, preload=False, verbose=None):
 
         raw_obj = cls.FILE_LOADER_FN(
             filepath,
             preload=preload,
             eog=cls.EOG_CHANNELS,
             exclude=list() if load_eog else cls.EOG_CHANNELS,
-            verbose=0
+            verbose=verbose
         )
 
         return raw_obj
 
     @classmethod
-    def load_as_epochs(cls, filepath, tmin=-.3, tmax=.7, reject=None, load_eog=False, has_labels=True):
+    def load_as_epochs(cls, filepath, tmin=-.3, tmax=.7, reject=None, load_eog=False, has_labels=True, verbose=None):
         # Default value of MNE is to not reject but default from
         # this class is using the REJECT_MAGNITUDE dict
 
@@ -68,7 +68,7 @@ class Dataset(ABC):
         elif reject is False:
             reject = None
 
-        raw_obj = cls.load_as_raw(filepath, preload=True, load_eog=load_eog)
+        raw_obj = cls.load_as_raw(filepath, preload=True, load_eog=load_eog, verbose=verbose)
         events, _ = events_from_annotations(raw_obj, event_id=cls.EVENT_MAP_DICT if has_labels else cls.UNKNOWN_EVENT_MAP_DICT)
 
         epochs = Epochs(
