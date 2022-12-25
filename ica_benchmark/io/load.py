@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import re
 
+
 PRELOAD = False
 
 
@@ -27,11 +28,6 @@ class Dataset(ABC):
     @property
     @abstractmethod
     def EOG_CHANNELS(self):
-        raise NotImplementedError
-
-    @property
-    @abstractmethod
-    def EVENT_MAP_DICT(self):
         raise NotImplementedError
 
     @property
@@ -68,6 +64,7 @@ class Dataset(ABC):
 
         raw_obj = cls.load_as_raw(filepath, preload=True, load_eog=load_eog)
         events, _ = events_from_annotations(raw_obj, event_id=cls.EVENT_MAP_DICT if has_labels else cls.UNKNOWN_EVENT_MAP_DICT)
+        
         epochs = Epochs(
             raw_obj,
             events,
@@ -119,15 +116,15 @@ class Dataset(ABC):
             obj, metadata = cls.load_from_filepath(filepath, as_epochs=as_epochs, **load_kwargs)
             objs.append(obj)
             metadata.append(metadata)
-            
+
         if concatenate:
             objs = concatenate_fn(objs)
-        
+
         if return_metadata:
             return objs, metadata
-            
+
         return objs
-    
+
     @abstractmethod
     def list_subject_filepaths(self) -> pd.DataFrame:
         raise NotImplementedError
@@ -144,7 +141,7 @@ class BCI_IV_Comp_Dataset(Dataset):
         "770": 1,
         "771": 2,
         "772": 3,
-#        "768": 4,
+        # "768": 4,
     }
 
     UNKNOWN_EVENT_MAP_DICT = {
@@ -263,4 +260,184 @@ class OpenBMI_Dataset(Dataset):
 
         epochs, _ = self.load_from_filepath(filepath, as_epochs=True, **kwargs)
         events = epochs.events[:, 2].flatten()
+        return epochs, events
+
+
+class Physionet_2009_Dataset(Dataset):
+
+    TRIALS = list(range(1, 14 + 1))
+    TASKS = list(map(str, [1, 2, 3, 4, 10, 11]))
+    TASK_DICT = {
+        1: "each_fist_execution",
+        2: "each_fist_imagery",
+        3: "both_fist_execution",
+        4: "both_fist_imagery"
+    }
+
+    EVENT_MAP_DICT = {
+        str(i): i
+        for i in range(12)
+        if i not in [9, ]  # There is no "9" annotation, as it can be seen in TASK_EVENT_REMAPPINGS
+    }
+
+    # Map the task number, defined in TRIAL_INFO_DF, to the EVENT_ID mappings
+    TASK_EVENT_REMAPPINGS = {
+        # Each dict maps the original annotation string to a new annotation string,
+        # which is unique amongst all trials, as in the original dataset the T1 and T2
+        # annotations were used for multiple tasks
+        #
+        # Tasks -> Labels
+        # Rest in Baseline, eyes open
+        "10": {"T0": "10"},
+        # Rest in Baseline, eyes closed
+        "11": {"T0": "11"},
+        "1": {
+            "T0": "0",  # Rest
+            "T1": "1",  # Left, execution
+            "T2": "2"   # Right, execution
+        },
+        "2": {
+            "T0": "0",  # Rest
+            "T1": "3",  # Left, imagination
+            "T2": "4"   # Right, imagination
+        },
+        "3": {
+            "T0": "0",  # Rest
+            "T1": "5",  # Both fists, execution
+            "T2": "6"   # Both feet, execution
+        },
+        "4": {
+            "T0": "0",  # Rest
+            "T1": "7",  # Both fists, imagery
+            "T2": "8"   # Both feet, imagery
+        }
+    }
+
+    # The trial number refers to the 'run', as defined in the dataset documentation page
+    # (https://physionet.org/content/eegmmidb/1.0.0/). The task is one of the 4 tasks plus the 2
+    # baseline protocols (eyes open and closed).
+    #
+    # Tasks description:
+    # - Task 10: Baseline, eyes open
+    # - Task 11: Baseline, eyes closed
+    # - Task 1: (open and close left or right fist)
+    # - Task 2: (imagine opening and closing left or right fist)
+    # - Task 3: (open and close both fists or both feet)
+    # - Task 4: (imagine opening and closing both fists or both feet)
+    # - Task 0: Rests that happened during Trials 3 to 14 (while performing tasks 1 to 4)
+    #
+    # In summary, the experimental runs were:
+    # Trial 1: Baseline, eyes open (Task 10, but is similar to Rest - task 0)
+    # Trial 2: Baseline, eyes closed (Task 11, similar to Rest - task 0)
+    # Trial 3: Task 1 (open and close left or right fist)
+    # Trial 4: Task 2 (imagine opening and closing left or right fist)
+    # Trial 5: Task 3 (open and close both fists or both feet)
+    # Trial 6: Task 4 (imagine opening and closing both fists or both feet)
+    # Trial 7: Task 1
+    # Trial 8: Task 2
+    # Trial 9: Task 3
+    # Trial 10: Task 4
+    # Trial 11: Task 1
+    # Trial 12: Task 2
+    # Trial 13: Task 3
+    # Trial 14: Task 4
+
+    UNKNOWN_EVENT_MAP_DICT = {}
+
+    EOG_CHANNELS = []
+
+    REJECT_MAGNITUDE = 1e-4
+
+    SUBJECT_INFO_KEYS = [
+        'id',
+        'sex',
+        'birthday',
+        'name'
+    ]
+
+    # [TODO] This @classmethod followd by @property is a usual thing to do,
+    # so maybe it would be better to change it?
+    @classmethod
+    @property
+    def TRIAL_INFO_DF(cls):
+        return pd.DataFrame(
+            [
+                [1, "baseline_open", "10"],
+                [2, "baseline_closed", "11"],
+            ] + [[i, cls.TASK_DICT[(i - 3) % 4 + 1], str((i - 3) % 4 + 1)] for i in range(3, 14 + 1)],
+            columns=["trial", "short_description", "task"]
+        )
+
+    @classmethod
+    def FILE_LOADER_FN(cls, filepath, **kwargs):
+        filepath_info = cls.parse_filepath_info(filepath)
+        trial = filepath_info["trial"]
+        task = cls.task_from_trial(trial)
+        raw = read_raw_edf(filepath, **kwargs)
+        raw.annotations.rename(cls.TASK_EVENT_REMAPPINGS[task])
+        return raw
+
+    def __init__(self, dataset_path, test_folder=None):
+        super(Physionet_2009_Dataset, self).__init__(dataset_path)
+        self.test_folder = test_folder or self.dataset_path
+        self.test_folder = Path(self.test_folder)
+    
+    @classmethod
+    def task_from_trial(cls, trial):
+        return cls.TRIAL_INFO_DF.query("trial == @trial").task.item()
+    
+    @classmethod
+    def parse_filepath_info(cls, filepath):
+        pattern = re.compile("S(?P<uid>[0-9]{3})R(?P<trial>[0-9]{2})") 
+        info = pattern.match(filepath.name).groupdict()
+        info = {k: str(int(v)) for k, v in info.items()}
+        info["trial"] = int(info["trial"])
+        info["task"] = cls.task_from_trial(info["trial"])
+        return info
+
+    @classmethod
+    def uid_from_filepath(self, filepath):
+        return self.parse_filepath_info(filepath)["uid"]
+
+    def list_subject_filepaths(self) -> pd.DataFrame:
+        filepaths = self.dataset_path.glob("**/*.edf")
+        filepaths_list = [
+            (
+                str(filepath),
+                *self.parse_filepath_info(filepath).values()
+            )
+            for filepath
+            in filepaths
+        ]
+        filepath_df = pd.DataFrame(filepaths_list, columns=["path", "uid", "trial", "task"])
+        return filepath_df
+
+    @classmethod
+    def _check_tasks(self, tasks):
+        assert isinstance(tasks, (list, tuple)), "Tasks must be a list of tasks"
+        assert all([isinstance(task, str) for task in tasks]), "The tasks must be strings!"
+        assert all([task in self.TASKS for task in tasks]), "You passed a invalid task, the possible tasks are: {}".format(", ".join(self.TASKS))
+
+    def load_subject(self, uid, tasks=None, trials=None, **kwargs):
+        tasks = tasks or self.TASKS
+        trials = trials or self.TRIALS
+        self._check_tasks(tasks)
+
+        filepaths_df = self.list_subject_filepaths()
+        filepaths = (
+            filepaths_df
+            .query("uid == @uid")
+            .query("task in @tasks")
+            .query("trial in @trials")
+            .path.apply(Path)
+        )
+
+        epochs_list = list()
+        for filepath in filepaths:
+            epochs, _ = self.load_from_filepath(filepath, as_epochs=True, **kwargs)
+            epochs_list.append(epochs)
+
+        epochs = concatenate_epochs(epochs_list)
+        events = epochs.events[:, 2]
+
         return epochs, events
