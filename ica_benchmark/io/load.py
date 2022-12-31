@@ -385,7 +385,7 @@ class Physionet_2009_Dataset(Dataset):
 
     SUBJECT_INFO_KEYS = ["id", "sex", "birthday", "name"]
 
-    # [TODO] This @classmethod followd by @property is a usual thing to do,
+    # [TODO] This @classmethod followd by @property is not a usual thing to do,
     # so maybe it would be better to change it?
     @classmethod
     @property
