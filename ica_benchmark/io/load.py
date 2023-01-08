@@ -66,7 +66,7 @@ class Dataset(ABC):
         reject=None,
         load_eog=False,
         has_labels=True,
-        verbose=None,
+        verbose=None
     ):
         # Default value of MNE is to not reject but default from
         # this class is using the REJECT_MAGNITUDE dict
@@ -77,7 +77,7 @@ class Dataset(ABC):
             reject = None
 
         raw_obj = cls.load_as_raw(
-            filepath, preload=True, load_eog=load_eog, verbose=verbose
+            filepath, preload=False, load_eog=load_eog, verbose=verbose
         )
         events, _ = events_from_annotations(
             raw_obj,
@@ -158,7 +158,7 @@ class Dataset(ABC):
         raise NotImplementedError
 
     def list_uids(self):
-        uids = self.list_subject_filepaths().uid.to_numpy()
+        uids = self.list_subject_filepaths().uid.unique()
         return uids
 
 
