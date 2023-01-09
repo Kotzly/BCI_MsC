@@ -65,7 +65,6 @@ class Dataset(ABC):
         tmax=0.7,
         reject=None,
         load_eog=False,
-        has_labels=True,
         verbose=None
     ):
         # Default value of MNE is to not reject but default from
@@ -81,7 +80,7 @@ class Dataset(ABC):
         )
         events, _ = events_from_annotations(
             raw_obj,
-            event_id=cls.EVENT_MAP_DICT if has_labels else cls.UNKNOWN_EVENT_MAP_DICT,
+            event_id=cls.EVENT_MAP_DICT,
             verbose=verbose,
         )
 
@@ -170,9 +169,6 @@ class BCI_IV_Comp_Dataset(Dataset):
         "771": 2,
         "772": 3,
         # "768": 4,
-    }
-
-    UNKNOWN_EVENT_MAP_DICT = {
         "783": 10,
     }
 
@@ -195,13 +191,13 @@ class BCI_IV_Comp_Dataset(Dataset):
 
     FILE_LOADER_FN = read_raw_gdf
 
+    SESSIONS = [1, 2]
+    HAS_LABELS = [1]
+
     def __init__(self, dataset_path, test_folder=None):
         super(BCI_IV_Comp_Dataset, self).__init__(dataset_path)
         self.test_folder = test_folder or self.dataset_path
         self.test_folder = Path(self.test_folder)
-
-    def get_uid_filename(self, uid, train=False):
-        return "A{}{}.gdf".format(str(uid).rjust(2, "0"), "T" if train else "E")
 
     def uid_from_filepath(self, filepath):
         return re.search("A0([0-9])[ET].gdf", filepath.name).group(1)
@@ -209,21 +205,38 @@ class BCI_IV_Comp_Dataset(Dataset):
     def list_subject_filepaths(self) -> pd.DataFrame:
         filepaths = self.dataset_path.glob("A*.gdf")
         filepaths_list = [
-            (str(filepath), "T" in filepath.name, self.uid_from_filepath(filepath))
+            (
+                str(filepath),
+                1 if "T" in filepath.name else 2,
+                self.uid_from_filepath(filepath)
+            )
             for filepath in filepaths
         ]
-        filepath_df = pd.DataFrame(filepaths_list, columns=["path", "train", "uid"])
+        filepath_df = pd.DataFrame(filepaths_list, columns=["path", "session", "uid"])
         return filepath_df
 
-    def load_subject(self, uid, train=False, **kwargs):
+    def _validate_session(self, session):
+        if session is None:
+            warn(
+                f"Using session 1, as you did not pass the session argument. Using the first session, but you can choose the sessions: {self.SESSIONS}.",
+                DefaultSessionWarning,
+            )
+            session = 1
+        return session
+
+    def load_subject(self, uid, session=None, **kwargs):
+        session = self._validate_session(session)
         filepaths_df = self.list_subject_filepaths()
         filepath = (
-            filepaths_df.query("uid == @uid").query("train == @train").path.item()
+            filepaths_df
+            .query("uid == @uid")
+            .query("session == @session")
+            .path.item()
         )
         epochs, _ = self.load_from_filepath(
-            filepath, as_epochs=True, has_labels=train, **kwargs
+            filepath, as_epochs=True, **kwargs
         )
-        if train:
+        if session in self.HAS_LABELS:
             events = epochs.events[:, 2].flatten()
         else:
             test_label_filepath = self.test_folder / "A0{}E.csv".format(uid)
@@ -241,8 +254,6 @@ class OpenBMI_Dataset(Dataset):
         "2": 1,
     }
 
-    UNKNOWN_EVENT_MAP_DICT = {}
-
     REJECT_MAGNITUDE = 1e-3
 
     SUBJECT_INFO_KEYS = ["id", "sex", "birthday", "name"]
@@ -250,7 +261,9 @@ class OpenBMI_Dataset(Dataset):
     FILE_LOADER_FN = read_raw_edf
 
     EOG_CHANNELS = list()
-
+    
+    SESSIONS = [1, 2]
+    
     def uid_from_filepath(self, filepath):
         return re.search("([0-9]+)_[\w]+.edf", filepath.name).group(1)
 
@@ -274,7 +287,7 @@ class OpenBMI_Dataset(Dataset):
     def _validate_session(self, session):
         if session is None:
             warn(
-                "Using session 1, as you did not pass the session argument. Using the first session, but you can choose either 1 or 2.",
+                f"Using session 1, as you did not pass the session argument. Using the first session, but you can choose the sessions: {self.SESSIONS}.",
                 DefaultSessionWarning,
             )
             session = 1
@@ -376,8 +389,6 @@ class Physionet_2009_Dataset(Dataset):
     # Trial 12: Task 2
     # Trial 13: Task 3
     # Trial 14: Task 4
-
-    UNKNOWN_EVENT_MAP_DICT = {}
 
     EOG_CHANNELS = []
 
