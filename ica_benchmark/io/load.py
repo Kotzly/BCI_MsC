@@ -14,15 +14,25 @@ class DefaultSessionWarning(Warning):
     pass
 
 
-class class_or_instancemethod(classmethod):
-    def __get__(self, instance, type_):
-        descr_get = super().__get__ if instance is None else self.__func__.__get__
-        return descr_get(instance, type_)
-
-
 class Dataset(ABC):
     def __init__(self, dataset_path):
         self.dataset_path = Path(dataset_path)
+
+    def uid_decorator(fn):
+        def decorated(*args, **kwargs):
+            # load_subject function returns the epochs and the events
+            epochs, events = fn(*args, **kwargs)
+            # uid is the second argument
+            uid = args[1]
+            epochs.info.update(
+                dict(
+                    subject_info=dict(
+                        uid=uid
+                    )
+                )
+            )
+            return epochs, events
+        return decorated
 
     @property
     @abstractmethod
@@ -199,6 +209,7 @@ class BCI_IV_Comp_Dataset(Dataset):
         self.test_folder = test_folder or self.dataset_path
         self.test_folder = Path(self.test_folder)
 
+    @classmethod
     def uid_from_filepath(self, filepath):
         return re.search("A0([0-9])[ET].gdf", filepath.name).group(1)
 
@@ -224,6 +235,7 @@ class BCI_IV_Comp_Dataset(Dataset):
             session = 1
         return session
 
+    @Dataset.uid_decorator
     def load_subject(self, uid, session=None, **kwargs):
         session = self._validate_session(session)
         filepaths_df = self.list_subject_filepaths()
@@ -261,9 +273,10 @@ class OpenBMI_Dataset(Dataset):
     FILE_LOADER_FN = read_raw_edf
 
     EOG_CHANNELS = list()
-    
+
     SESSIONS = [1, 2]
-    
+
+    @classmethod
     def uid_from_filepath(self, filepath):
         return re.search("([0-9]+)_[\w]+.edf", filepath.name).group(1)
 
@@ -293,6 +306,7 @@ class OpenBMI_Dataset(Dataset):
             session = 1
         return session
 
+    @Dataset.uid_decorator
     def load_subject(self, uid, session=None, train=False, **kwargs):
 
         session = self._validate_session(session)
@@ -467,6 +481,7 @@ class Physionet_2009_Dataset(Dataset):
             ", ".join(self.TASKS)
         )
 
+    @Dataset.uid_decorator
     def load_subject(self, uid, tasks=None, trials=None, **kwargs):
         tasks = tasks or self.TASKS
         trials = trials or self.TRIALS
