@@ -15,6 +15,15 @@ class DefaultSessionWarning(Warning):
 
 
 class Dataset(ABC):
+    """In the load_subject function we use the session and run notations.
+    Session refers to one time that the subject has put on the EEG equipment until it removes it.
+    The run refers to one repetition of the whole protocol.
+
+    In the BCI IV Competition dataset, the run refers to the Train and Test sets.
+    In the OpenBMI dataset, the run also refers to the Train and Test sets.
+
+    """
+
     def __init__(self, dataset_path):
         self.dataset_path = Path(dataset_path)
 
@@ -170,6 +179,39 @@ class Dataset(ABC):
         uids = self.list_subject_filepaths().uid.unique()
         return uids
 
+    def _validate_session(self, session):
+        assert session in self.SESSIONS, "You asked for session {}, but the available sessions are {}".format(session, self.SESSIONS)
+        if session is None:
+            warn(
+                f"Using session 1, as you did not pass the session argument. Using the first session, but you can choose the sessions: {self.SESSIONS}.",
+                DefaultSessionWarning,
+            )
+            session = 1
+        return session
+
+    def _validate_run(self, run, train=None):
+        assert run in self.RUNS, "You asked for run {}, but the available runs are {}".format(run, self.RUNS)
+        if run is None:
+            if train is None:
+                warn(
+                    f"Using run 1, as you did not pass the session argument. Using the first session, but you can choose the runs: {self.RUNS}.",
+                    DefaultSessionWarning,
+                )
+                run = 1
+            elif train:
+                warn(
+                    "Using run {} because you used train=True. In the future the train argument may be deprecated.".format(self.RUN_FOLD_DICT["train"]),
+                    DefaultSessionWarning,
+                )
+                run = self.RUN_FOLD_DICT["train"]
+            else:
+                warn(
+                    "Using run {} because you used train=False. In the future the train argument may be deprecated.".format(self.RUN_FOLD_DICT["test"]),
+                    DefaultSessionWarning,
+                )
+                run = self.RUN_FOLD_DICT["test"]
+        return run
+
 
 class BCI_IV_Comp_Dataset(Dataset):
 
@@ -202,6 +244,12 @@ class BCI_IV_Comp_Dataset(Dataset):
     FILE_LOADER_FN = read_raw_gdf
 
     SESSIONS = [1, 2]
+    RUNS = [1, 2]
+    RUN_FOLD_DICT = dict(
+        train=1,
+        test=2
+    )
+
     HAS_LABELS = [1]
 
     def __init__(self, dataset_path, test_folder=None):
@@ -219,30 +267,25 @@ class BCI_IV_Comp_Dataset(Dataset):
             (
                 str(filepath),
                 1 if "T" in filepath.name else 2,
+                1,
                 self.uid_from_filepath(filepath)
             )
             for filepath in filepaths
         ]
-        filepath_df = pd.DataFrame(filepaths_list, columns=["path", "session", "uid"])
+        filepath_df = pd.DataFrame(filepaths_list, columns=["path", "session", "run", "uid"])
         return filepath_df
 
-    def _validate_session(self, session):
-        if session is None:
-            warn(
-                f"Using session 1, as you did not pass the session argument. Using the first session, but you can choose the sessions: {self.SESSIONS}.",
-                DefaultSessionWarning,
-            )
-            session = 1
-        return session
-
     @Dataset.uid_decorator
-    def load_subject(self, uid, session=None, **kwargs):
+    def load_subject(self, uid, session=None, run=None, train=None, **kwargs):
         session = self._validate_session(session)
+        run = self._validate_run(run, train=train)
+
         filepaths_df = self.list_subject_filepaths()
         filepath = (
             filepaths_df
             .query("uid == @uid")
             .query("session == @session")
+            .query("run == @run")
             .path.item()
         )
         epochs, _ = self.load_from_filepath(
@@ -275,6 +318,11 @@ class OpenBMI_Dataset(Dataset):
     EOG_CHANNELS = list()
 
     SESSIONS = [1, 2]
+    RUNS = [1, 2]
+    RUN_FOLD_DICT = dict(
+        train=1,
+        test=2
+    )
 
     @classmethod
     def uid_from_filepath(self, filepath):
@@ -286,35 +334,27 @@ class OpenBMI_Dataset(Dataset):
         filepaths_list = [
             (
                 str(filepath),
-                "train" in filepath.name,
                 int(filepath.parts[-2][-1]),
+                1 if ("train" in filepath.name) else 2,
                 self.uid_from_filepath(filepath),
             )
             for filepath in filepaths
         ]
         filepath_df = pd.DataFrame(
-            filepaths_list, columns=["path", "train", "session", "uid"]
+            filepaths_list, columns=["path", "session", "run", "uid"]
         )
         return filepath_df
 
-    def _validate_session(self, session):
-        if session is None:
-            warn(
-                f"Using session 1, as you did not pass the session argument. Using the first session, but you can choose the sessions: {self.SESSIONS}.",
-                DefaultSessionWarning,
-            )
-            session = 1
-        return session
-
     @Dataset.uid_decorator
-    def load_subject(self, uid, session=None, train=False, **kwargs):
+    def load_subject(self, uid, session=None, run=None, train=None, **kwargs):
 
         session = self._validate_session(session)
+        run = self._validate_run(run, train=train)
 
         filepaths_df = self.list_subject_filepaths()
         filepath = (
             filepaths_df.query("uid == @uid")
-            .query("train == @train")
+            .query("run == @run")
             .query("session == @session")
             .path.item()
         )
@@ -410,6 +450,10 @@ class Physionet_2009_Dataset(Dataset):
 
     SUBJECT_INFO_KEYS = ["id", "sex", "birthday", "name"]
 
+    SESSIONS = list()
+    RUNS = list()
+    RUN_FOLD_DICT = dict()
+
     # [TODO] This @classmethod followd by @property is not a usual thing to do,
     # so maybe it would be better to change it?
     @classmethod
@@ -419,8 +463,7 @@ class Physionet_2009_Dataset(Dataset):
             [
                 [1, "baseline_open", "10"],
                 [2, "baseline_closed", "11"],
-            ]
-            + [
+            ] + [
                 [i, cls.TASK_DICT[(i - 3) % 4 + 1], str((i - 3) % 4 + 1)]
                 for i in range(3, 14 + 1)
             ],
@@ -461,12 +504,18 @@ class Physionet_2009_Dataset(Dataset):
     def list_subject_filepaths(self) -> pd.DataFrame:
         filepaths = self.dataset_path.glob("**/*.edf")
         filepaths_list = [
-            (str(filepath), *self.parse_filepath_info(filepath).values())
+            (
+                str(filepath),
+                *self.parse_filepath_info(filepath).values()
+            )
             for filepath in filepaths
         ]
         filepath_df = pd.DataFrame(
             filepaths_list, columns=["path", "uid", "trial", "task"]
         )
+        filepath_df["run"] = 1  # Dummy run
+        filepath_df["session"] = 1  # Dummy session
+
         return filepath_df
 
     @classmethod
@@ -482,7 +531,10 @@ class Physionet_2009_Dataset(Dataset):
         )
 
     @Dataset.uid_decorator
-    def load_subject(self, uid, tasks=None, trials=None, **kwargs):
+    def load_subject(self, uid, tasks=None, trials=None, session=None, run=None, **kwargs):
+
+        # Session and run are not used, just here for compatibility
+
         tasks = tasks or self.TASKS
         trials = trials or self.TRIALS
         self._check_tasks(tasks)
