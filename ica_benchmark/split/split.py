@@ -1,56 +1,44 @@
 import pandas as pd
 from sklearn.model_selection import KFold
 from warnings import warn, filterwarnings
-from itertools import product, chain
 import numpy as np
 from mne import Epochs
 import mne
-from types import GeneratorType
 from ica_benchmark.io.load import OpenBMI_Dataset
-from collections.abc import Iterable
 from pathlib import Path
+from ica_benchmark.utils.itertools import group_iterator, constrained_group_iterator
 
 
-# ITERABLES_TYPES = (list, tuple, GeneratorType, product, chain)
-# [TODO] str is iterable, but not one we want here
-ITERABLES_TYPES = Iterable
+class Split():
 
-def apply_to_iterator(iterator, fn):
-    for item in iterator:
-        if isinstance(item, ITERABLES_TYPES):
-            yield apply_to_iterator(item, fn)
-        else:
-            yield fn(item)
+    def __init__(self, kwarg_dict_list):
+        self.kwargs_list = kwarg_dict_list
 
+    def to_dataframe(self):
+        return pd.DataFrame.from_records(self.kwargs_list)
 
-def unpack_deep_iterable(deep_iterable):
-    # Keep levels as a nested list
-    if isinstance(deep_iterable, (GeneratorType, tuple, list)):
-        # If deep_iterable is iterable, just make sure that if it is a generator that it is iterated
-        deep_iterable = list(deep_iterable)
-        return [
-            unpack_deep_iterable(shallow_iterable)
-            for shallow_iterable in deep_iterable
+    def __repr__(self):
+        dict_reps = [str(d) for d in self.kwargs_list]
+        return "Split({})".format(",".join(dict_reps))
+
+    def load_epochs(self, dataset, concatenate=True, **load_kwargs):
+
+        epochs = [
+            dataset.load_subject(kwargs["uid"], **remove_key(kwargs, "uid"), **load_kwargs)[0]
+            for kwargs in self.kwargs_list
         ]
-    else:
-        return deep_iterable
+        if concatenate:
+            epochs = mne.concatenate_epochs(epochs)
+
+        return epochs
 
 
-def flatten_deep_iterable(deep_iterable):
-    # Returns a flat iterator of all items that are not in ITERABLES_TYPES inside deep_iterable
-    for item in deep_iterable:
-        if isinstance(item, ITERABLES_TYPES):
-            for nested_item in flatten_deep_iterable(item):
-                yield nested_item
-        else:
-            yield item
-
-def apply_to_iterator(iterator, fn):
-    for item in iterator:
-        if isinstance(item, ITERABLES_TYPES):
-            yield apply_to_iterator(item, fn)
-        else:
-            yield fn(item)
+def remove_key(d, k):
+    return {
+        key: value
+        for key, value in d.items()
+        if key != k
+    }
 
 
 def make_epochs_splits_indexes(arr, n=None, n_splits=2, sizes=None, shuffle=False, seed=1):
@@ -86,42 +74,20 @@ def make_epochs_splits(arr, n=None, n_splits=2, sizes=None, shuffle=False, seed=
     return arrs
 
 
-def remove_key(d, k):
-    return {
-        key: value
-        for key, value in d.items()
-        if key != k
-    }
+def constrained_split_group_iterator(split_kwargs_dicts):
 
-
-def product_dict(**kwargs):
-    keys = kwargs.keys()
-    vals = kwargs.values()
-    for instance in product(*vals):
-        yield dict(zip(keys, instance))
-
-
-def insideout_group_iterator(split_kwargs_dicts, d=None, level=None):
-
-    level = level or len(split_kwargs_dicts) - 1
-
-    for inner_d in product_dict(**split_kwargs_dicts[level]):
-        if level == 0:
-            yield {**d, **inner_d}
-        else:
-            yield group_iterator(split_kwargs_dicts, d={**d, **inner_d}, level=level - 1)
-
-
-def group_iterator(split_kwargs_dicts, d=None, level=None):
-
-    level = level or 0
-    d = d or dict()
-
-    for inner_d in product_dict(**split_kwargs_dicts[level]): 
-        if level == (len(split_kwargs_dicts) - 1):
-            yield {**d, **inner_d}
-        else:
-            yield group_iterator(split_kwargs_dicts, d={**d, **inner_d}, level=level + 1)
+    for iteration_splits_kwargs in group_iterator(split_kwargs_dicts):
+        yield [
+            Split(
+                [
+                    dict(
+                        **split_kwargs
+                    )
+                    for split_kwargs in splits_kwargs_list
+                ]
+            )
+            for splits_kwargs_list in iteration_splits_kwargs
+        ]
 
 
 def splits_from_group_iterator(group_iterator_instance):
@@ -160,72 +126,6 @@ def create_split_group_iterator(outer_split_kwargs=None, inner_split_kwargs=None
     )
 
 
-class Split():
-
-    def __init__(self, kwarg_dict_list):
-        self.kwargs_list = kwarg_dict_list
-
-    def to_dataframe(self):
-        return pd.DataFrame.from_records(self.kwargs_list)
-
-    def __repr__(self):
-        dict_reps = [str(d) for d in self.kwargs_list]
-        return "Split({})".format(",".join(dict_reps))
-
-    def load_epochs(self, dataset, **load_kwargs, concatenate=True):
-
-        epochs = [
-            dataset.load_subject(kwargs["uid"], **remove_key(kwargs, "uid"), **load_kwargs)[0]
-            for kwargs in self.kwargs_list
-        ]
-        if concatenate:
-            epochs = mne.concatenate_epochs(epochs)
-
-        return epochs
-
-
-def constrained_group_iterator(split_kwargs_dicts, d=None, level=None, constraining_function=None, level_idx_dict=None):
-    constraining_function = constraining_function or (lambda l, i, kwargs: (kwargs, True))
-    level = level or 0
-    level_idx_dict = level_idx_dict or dict()
-    d = d or dict()
-
-    for idx, inner_d in enumerate(product_dict(**split_kwargs_dicts[level])):
-        level_idx_dict[level] = idx
-
-        kwargs = {**d, **inner_d}
-        kwargs, valid = constraining_function(level, level_idx_dict, kwargs)
-        if not valid:
-            continue
-
-        if level == (len(split_kwargs_dicts) - 1):
-            yield kwargs
-        else:
-            yield constrained_group_iterator(
-                split_kwargs_dicts,
-                d=kwargs,
-                level=level + 1,
-                constraining_function=constraining_function,
-                level_idx_dict=level_idx_dict
-            )
-
-
-def constrained_split_group_iterator(split_kwargs_dicts):
-
-    for iteration_splits_kwargs in group_iterator(split_kwargs_dicts):
-        yield [
-            Split(
-                [
-                    dict(
-                        **split_kwargs
-                    )
-                    for split_kwargs in splits_kwargs_list
-                ]
-            )
-            for splits_kwargs_list in iteration_splits_kwargs
-        ]
-
-
 def create_splitter_constraint_fn(splitter, uids):
     # Creates a dataframe with columns fold, uid and group (train or test)
     # It is only used to later check if volunteer with uid is in train or test for each fold.
@@ -249,7 +149,7 @@ def create_splitter_constraint_fn(splitter, uids):
             return kwargs, True
 
         r = (
-            kwargs["uid"] in 
+            kwargs["uid"] in
             split_df[(split_df.group == kwargs["group"]) & (split_df.fold == kwargs["fold"])].uid.to_numpy()
         )
         kwargs.pop("group")
@@ -261,7 +161,7 @@ def create_splitter_constraint_fn(splitter, uids):
 
 
 def kfold_split_group_iterator(splitter, uids, n_groups=2):
-    
+
     kfold_iterable = constrained_group_iterator(
         [
             dict(fold=np.arange(splitter.get_n_splits())),
@@ -398,7 +298,7 @@ class Splitter():
 
             # if (len(fold_splits) == 1) and (fold_sizes is None):
             #     warn("This splitter return only one split and you passed no fold sizes for intra splitting. Is this what you want?")
-                
+
             yield fold_splits
 
     def load_from_split(self, splits, fold_sizes=None):
