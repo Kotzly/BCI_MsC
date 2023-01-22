@@ -180,17 +180,16 @@ class Dataset(ABC):
         return uids
 
     def _validate_session(self, session):
-        assert session in self.SESSIONS, "You asked for session {}, but the available sessions are {}".format(session, self.SESSIONS)
         if session is None:
             warn(
                 f"Using session 1, as you did not pass the session argument. Using the first session, but you can choose the sessions: {self.SESSIONS}.",
                 DefaultSessionWarning,
             )
             session = 1
+        assert session in self.SESSIONS, "You asked for session {}, but the available sessions are {}".format(session, self.SESSIONS)
         return session
 
     def _validate_run(self, run, train=None):
-        assert run in self.RUNS, "You asked for run {}, but the available runs are {}".format(run, self.RUNS)
         if run is None:
             if train is None:
                 warn(
@@ -210,6 +209,8 @@ class Dataset(ABC):
                     DefaultSessionWarning,
                 )
                 run = self.RUN_FOLD_DICT["test"]
+        assert run in self.RUNS, "You asked for run {}, but the available runs are {}".format(run, self.RUNS)
+
         return run
 
 
