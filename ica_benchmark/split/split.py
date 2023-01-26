@@ -20,6 +20,10 @@ class Split():
     def __repr__(self):
         dict_reps = [str(d) for d in self.kwargs_list]
         return "Split({})".format(",".join(dict_reps))
+    
+    def __getitem__(self, k):
+        values = [kwargs[k] for kwargs in self.kwargs_list]
+        return values
 
     def load_epochs(self, dataset, concatenate=True, **load_kwargs):
 
@@ -41,11 +45,13 @@ def remove_key(d, k):
     }
 
 
-def make_epochs_splits_indexes(arr, n=None, n_splits=2, sizes=None, shuffle=False, seed=1):
+def make_epochs_splits_indexes(arr, n=None, n_splits=2, sizes=None, shuffle=False, seed=None):
     if not isinstance(arr, (Epochs,)):
         arr = np.array(arr)
 
-    np.random.seed(seed)
+    if seed:
+        np.random.seed(seed)
+    
     if n is None:
         if isinstance(arr, Epochs):
             n = len(arr.events)
@@ -68,7 +74,7 @@ def make_epochs_splits_indexes(arr, n=None, n_splits=2, sizes=None, shuffle=Fals
     return indexes
 
 
-def make_epochs_splits(arr, n=None, n_splits=2, sizes=None, shuffle=False, seed=1):
+def make_epochs_splits(arr, n=None, n_splits=2, sizes=None, shuffle=False, seed=None):
     indexes = make_epochs_splits_indexes(arr, n=n, n_splits=n_splits, sizes=sizes, shuffle=shuffle, seed=seed)
     arrs = [arr[idx] for idx in indexes]
     return arrs
@@ -185,6 +191,7 @@ def kfold_split_group_iterator(splitter, uids, n_groups=2):
 
 
 class Splitter():
+    # [TODO] Make intra run protocols use "splitter" for splitting train and test
 
     SESSION_KWARGS = dict(intra=dict(), inter=dict())
 
@@ -193,7 +200,7 @@ class Splitter():
         warn("Using default splitter: " + str(splitter))
         return splitter
 
-    def __init__(self, dataset, uids, sessions, runs, load_kwargs=None, splitter=None, unsafe=False, intra_session_shuffle=False, fold_sizes=None):
+    def __init__(self, dataset, uids, sessions, runs, load_kwargs=None, splitter=None, unsafe=False, intra_session_shuffle=False, fold_sizes=None, seed=None):
         self.dataset = dataset
         self.uids = uids
         self.sessions = sessions
@@ -202,6 +209,7 @@ class Splitter():
         self.splitter = splitter or self.default_splitter()
         self.intra_session_shuffle = intra_session_shuffle
         self.fold_sizes = fold_sizes
+        self.seed = seed
 
     def validate_config(self, mode):
         valid_modes = [
@@ -301,7 +309,7 @@ class Splitter():
 
             yield fold_splits
 
-    def load_from_split(self, splits, fold_sizes=None):
+    def load_from_splits(self, splits, fold_sizes=None):
         fold_sizes = fold_sizes or self.fold_sizes
         splits_epochs = [
             split.load_epochs(self.dataset, **self.load_kwargs)
@@ -312,8 +320,13 @@ class Splitter():
             splits_epochs = make_epochs_splits(
                 splits_epochs[0],
                 sizes=fold_sizes,
-                shuffle=self.intra_session_shuffle
+                shuffle=self.intra_session_shuffle,
+                seed=self.seed
             )
+        else:
+            if len(splits_epochs) == 1:
+                warn("You are using folds with only one split, and yet you did not use the fold_sizes argument.")
+
         return splits_epochs
 
 
@@ -344,11 +357,10 @@ if __name__ == "__main__":
     for i, fold_splits in enumerate(splits_iterable):
         print(f"Fold {i}")
         print(f"\tSplits {fold_splits}")
-        epochs = splitter.load_from_split(fold_splits, fold_sizes=fold_sizes)
+        epochs = splitter.load_from_splits(fold_splits, fold_sizes=fold_sizes)
         print(f"\tEpochs {epochs}")
         print()
         del epochs
-    exit()
 
     print("Changing splitter uids to ['1']")
     splitter.uids = ["1"]
@@ -357,7 +369,7 @@ if __name__ == "__main__":
     for i, fold_splits in enumerate(splits_iterable):
         print(f"Fold {i}")
         print(f"\tSplits {fold_splits}")
-        epochs = splitter.load_from_split(fold_splits, fold_sizes=None)
+        epochs = splitter.load_from_splits(fold_splits, fold_sizes=None)
         print(f"\tEpochs {epochs}")
         print()
         del epochs
@@ -366,7 +378,7 @@ if __name__ == "__main__":
     for i, fold_splits in enumerate(splits_iterable):
         print(f"Fold {i}")
         print(f"\tSplits {fold_splits}")
-        epochs = splitter.load_from_split(fold_splits, fold_sizes=None)
+        epochs = splitter.load_from_splits(fold_splits, fold_sizes=None)
         print(f"\tEpochs {epochs}")
         print()
         del epochs
@@ -375,7 +387,7 @@ if __name__ == "__main__":
     for i, fold_splits in enumerate(splits_iterable):
         print(f"Fold {i}")
         print(f"\tSplits {fold_splits}")
-        epochs = splitter.load_from_split(fold_splits, fold_sizes=[.75, .25])
+        epochs = splitter.load_from_splits(fold_splits, fold_sizes=[.75, .25])
         print(f"\tEpochs {epochs}")
         print()
         del epochs
@@ -384,7 +396,7 @@ if __name__ == "__main__":
     for i, fold_splits in enumerate(splits_iterable):
         print(f"Fold {i}")
         print(f"\tSplits {fold_splits}")
-        epochs = splitter.load_from_split(fold_splits, fold_sizes=[.75, .25])
+        epochs = splitter.load_from_splits(fold_splits, fold_sizes=[.75, .25])
         print(f"\tEpochs {epochs}")
         print()
         del epochs
