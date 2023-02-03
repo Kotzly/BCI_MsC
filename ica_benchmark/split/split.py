@@ -9,8 +9,7 @@ from pathlib import Path
 from ica_benchmark.utils.itertools import group_iterator, constrained_group_iterator
 
 
-class Split():
-
+class Split:
     def __init__(self, kwarg_dict_list):
         self.kwargs_list = kwarg_dict_list
 
@@ -20,7 +19,7 @@ class Split():
     def __repr__(self):
         dict_reps = [str(d) for d in self.kwargs_list]
         return "Split({})".format(",".join(dict_reps))
-    
+
     def __getitem__(self, k):
         values = [kwargs[k] for kwargs in self.kwargs_list]
         return values
@@ -28,7 +27,9 @@ class Split():
     def load_epochs(self, dataset, concatenate=True, **load_kwargs):
 
         epochs = [
-            dataset.load_subject(kwargs["uid"], **remove_key(kwargs, "uid"), **load_kwargs)[0]
+            dataset.load_subject(
+                kwargs["uid"], **remove_key(kwargs, "uid"), **load_kwargs
+            )[0]
             for kwargs in self.kwargs_list
         ]
         if concatenate:
@@ -38,20 +39,18 @@ class Split():
 
 
 def remove_key(d, k):
-    return {
-        key: value
-        for key, value in d.items()
-        if key != k
-    }
+    return {key: value for key, value in d.items() if key != k}
 
 
-def make_epochs_splits_indexes(arr, n=None, n_splits=2, sizes=None, shuffle=False, seed=None):
+def make_epochs_splits_indexes(
+    arr, n=None, n_splits=2, sizes=None, shuffle=False, seed=None
+):
     if not isinstance(arr, (Epochs,)):
         arr = np.array(arr)
 
     if seed:
         np.random.seed(seed)
-    
+
     if n is None:
         if isinstance(arr, Epochs):
             n = len(arr.events)
@@ -60,11 +59,9 @@ def make_epochs_splits_indexes(arr, n=None, n_splits=2, sizes=None, shuffle=Fals
 
     sizes = sizes or [1 / n_splits] * n_splits
 
-    assert np.sum(sizes) == 1.
+    assert np.sum(sizes) == 1.0
 
-    sizes = np.cumsum(
-        [0] + [int(size * n) for size in sizes]
-    )
+    sizes = np.cumsum([0] + [int(size * n) for size in sizes])
 
     idx = np.arange(n)
     if shuffle:
@@ -75,7 +72,9 @@ def make_epochs_splits_indexes(arr, n=None, n_splits=2, sizes=None, shuffle=Fals
 
 
 def make_epochs_splits(arr, n=None, n_splits=2, sizes=None, shuffle=False, seed=None):
-    indexes = make_epochs_splits_indexes(arr, n=n, n_splits=n_splits, sizes=sizes, shuffle=shuffle, seed=seed)
+    indexes = make_epochs_splits_indexes(
+        arr, n=n, n_splits=n_splits, sizes=sizes, shuffle=shuffle, seed=seed
+    )
     arrs = [arr[idx] for idx in indexes]
     return arrs
 
@@ -84,14 +83,7 @@ def constrained_split_group_iterator(split_kwargs_dicts):
 
     for iteration_splits_kwargs in group_iterator(split_kwargs_dicts):
         yield [
-            Split(
-                [
-                    dict(
-                        **split_kwargs
-                    )
-                    for split_kwargs in splits_kwargs_list
-                ]
-            )
+            Split([dict(**split_kwargs) for split_kwargs in splits_kwargs_list])
             for splits_kwargs_list in iteration_splits_kwargs
         ]
 
@@ -100,25 +92,18 @@ def splits_from_group_iterator(group_iterator_instance):
 
     for iteration_splits_kwargs in group_iterator_instance:
         yield [
-            Split(
-                [
-                    dict(
-                        **split_kwargs
-                    )
-                    for split_kwargs in splits_kwargs_list
-                ]
-            )
+            Split([dict(**split_kwargs) for split_kwargs in splits_kwargs_list])
             for splits_kwargs_list in iteration_splits_kwargs
         ]
 
 
 def split_group_iterator(split_kwargs_dicts):
-    return splits_from_group_iterator(
-        group_iterator(split_kwargs_dicts)
-    )
+    return splits_from_group_iterator(group_iterator(split_kwargs_dicts))
 
 
-def create_split_group_iterator(outer_split_kwargs=None, inner_split_kwargs=None, merge_kwargs=None):
+def create_split_group_iterator(
+    outer_split_kwargs=None, inner_split_kwargs=None, merge_kwargs=None
+):
     outer_split_kwargs = outer_split_kwargs or dict()
     inner_split_kwargs = inner_split_kwargs or dict()
     merge_kwargs = merge_kwargs or dict()
@@ -155,8 +140,10 @@ def create_splitter_constraint_fn(splitter, uids):
             return kwargs, True
 
         r = (
-            kwargs["uid"] in
-            split_df[(split_df.group == kwargs["group"]) & (split_df.fold == kwargs["fold"])].uid.to_numpy()
+            kwargs["uid"]
+            in split_df[
+                (split_df.group == kwargs["group"]) & (split_df.fold == kwargs["fold"])
+            ].uid.to_numpy()
         )
         kwargs.pop("group")
         kwargs.pop("fold")
@@ -174,23 +161,16 @@ def kfold_split_group_iterator(splitter, uids, n_groups=2):
             dict(group=np.arange(n_groups)),
             dict(uid=uids),
         ],
-        constraining_function=create_splitter_constraint_fn(splitter, uids)
+        constraining_function=create_splitter_constraint_fn(splitter, uids),
     )
     for iteration_splits_kwargs in kfold_iterable:
         yield [
-            Split(
-                [
-                    dict(
-                        **split_kwargs
-                    )
-                    for split_kwargs in splits_kwargs_list
-                ]
-            )
+            Split([dict(**split_kwargs) for split_kwargs in splits_kwargs_list])
             for splits_kwargs_list in iteration_splits_kwargs
         ]
 
 
-class Splitter():
+class Splitter:
     # [TODO] Make intra run protocols use "splitter" for splitting train and test
 
     SESSION_KWARGS = dict(intra=dict(), inter=dict())
@@ -200,7 +180,19 @@ class Splitter():
         warn("Using default splitter: " + str(splitter))
         return splitter
 
-    def __init__(self, dataset, uids, sessions, runs, load_kwargs=None, splitter=None, unsafe=False, intra_session_shuffle=False, fold_sizes=None, seed=None):
+    def __init__(
+        self,
+        dataset,
+        uids,
+        sessions,
+        runs,
+        load_kwargs=None,
+        splitter=None,
+        unsafe=False,
+        intra_session_shuffle=False,
+        fold_sizes=None,
+        seed=None,
+    ):
         self.dataset = dataset
         self.uids = uids
         self.sessions = sessions
@@ -217,22 +209,34 @@ class Splitter():
             "inter_session",
             "intra_session_intra_run",
             "intra_session_inter_run",
-            "intra_session_intra_run_merged"
+            "intra_session_intra_run_merged",
         ]
         fold_sizes = self.fold_sizes
-        assert mode in valid_modes, "Please choose one mode among the following: {}".format(", ".join(valid_modes))
+        assert (
+            mode in valid_modes
+        ), "Please choose one mode among the following: {}".format(
+            ", ".join(valid_modes)
+        )
         if mode == "inter_subject":
             if fold_sizes is not None:
-                warn("You are using the inter_subject mode, so the fold_sizes argument will not be used")
+                warn(
+                    "You are using the inter_subject mode, so the fold_sizes argument will not be used"
+                )
         elif mode == "inter_session":
             if len(self.runs) > 1:
-                warn("You are using inter session protocol with more than one run. All runs from each session will be concatenated and yielded in different steps.")
-        elif (mode == "intra_session_inter_run"):
-            if (len(self.runs) == 1):
-                warn("You are using an intra session protocol, splitting by run, but only passed one run. The splitter can only yield one epoch at time (from the only run you passed as argument)")
+                warn(
+                    "You are using inter session protocol with more than one run. All runs from each session will be concatenated and yielded in different steps."
+                )
+        elif mode == "intra_session_inter_run":
+            if len(self.runs) == 1:
+                warn(
+                    "You are using an intra session protocol, splitting by run, but only passed one run. The splitter can only yield one epoch at time (from the only run you passed as argument)"
+                )
         elif mode in ("intra_session_intra_run", "intra_session_intra_run_merged"):
             if fold_sizes is None:
-                warn("You are using intra session intra run protocol with no fold sizes. The splitter will only yield one epoch at time")
+                warn(
+                    "You are using intra session intra run protocol with no fold sizes. The splitter will only yield one epoch at time"
+                )
 
     def inter_subject(self, splitter=None, n_groups=2):
         splitter = splitter or self.splitter
@@ -242,7 +246,7 @@ class Splitter():
                 dict(group=np.arange(n_groups)),
                 dict(uid=self.uids, session=self.sessions, run=self.runs),
             ],
-            constraining_function=create_splitter_constraint_fn(splitter, self.uids)
+            constraining_function=create_splitter_constraint_fn(splitter, self.uids),
         )
 
         return splits_from_group_iterator(fold_iterable)
@@ -312,20 +316,25 @@ class Splitter():
     def load_from_splits(self, splits, fold_sizes=None):
         fold_sizes = fold_sizes or self.fold_sizes
         splits_epochs = [
-            split.load_epochs(self.dataset, **self.load_kwargs)
-            for split in splits
+            split.load_epochs(self.dataset, **self.load_kwargs) for split in splits
         ]
         if fold_sizes is not None:
-            assert len(splits_epochs) == 1, "You passed fold_sizes={} but there in more than one split".format(fold_sizes)
+            assert (
+                len(splits_epochs) == 1
+            ), "You passed fold_sizes={} but there in more than one split".format(
+                fold_sizes
+            )
             splits_epochs = make_epochs_splits(
                 splits_epochs[0],
                 sizes=fold_sizes,
                 shuffle=self.intra_session_shuffle,
-                seed=self.seed
+                seed=self.seed,
             )
         else:
             if len(splits_epochs) == 1:
-                warn("You are using folds with only one split, and yet you did not use the fold_sizes argument.")
+                warn(
+                    "You are using folds with only one split, and yet you did not use the fold_sizes argument."
+                )
 
         return splits_epochs
 
@@ -335,7 +344,7 @@ if __name__ == "__main__":
     mne.set_log_level(False)
     filterwarnings("ignore", category=RuntimeWarning)
 
-    openbmi_dataset_folderpath = Path('/home/paulo/Documents/datasets/OpenBMI/edf/')
+    openbmi_dataset_folderpath = Path("/home/paulo/Documents/datasets/OpenBMI/edf/")
     dataset = OpenBMI_Dataset(openbmi_dataset_folderpath)
     fold_sizes = None
     splitter = Splitter(
@@ -343,14 +352,10 @@ if __name__ == "__main__":
         uids=dataset.list_uids()[:4],
         sessions=dataset.SESSIONS,
         runs=dataset.RUNS,
-        load_kwargs=dict(
-            reject=False,
-            tmin=0,
-            tmax=1
-        ),
+        load_kwargs=dict(reject=False, tmin=0, tmax=1),
         splitter=KFold(4),
         intra_session_shuffle=False,
-        fold_sizes=fold_sizes
+        fold_sizes=fold_sizes,
     )
 
     splits_iterable = splitter.yield_splits_epochs(mode="inter_subject")
@@ -387,16 +392,18 @@ if __name__ == "__main__":
     for i, fold_splits in enumerate(splits_iterable):
         print(f"Fold {i}")
         print(f"\tSplits {fold_splits}")
-        epochs = splitter.load_from_splits(fold_splits, fold_sizes=[.75, .25])
+        epochs = splitter.load_from_splits(fold_splits, fold_sizes=[0.75, 0.25])
         print(f"\tEpochs {epochs}")
         print()
         del epochs
 
-    splits_iterable = splitter.yield_splits_epochs(mode="intra_session_intra_run_merged")
+    splits_iterable = splitter.yield_splits_epochs(
+        mode="intra_session_intra_run_merged"
+    )
     for i, fold_splits in enumerate(splits_iterable):
         print(f"Fold {i}")
         print(f"\tSplits {fold_splits}")
-        epochs = splitter.load_from_splits(fold_splits, fold_sizes=[.75, .25])
+        epochs = splitter.load_from_splits(fold_splits, fold_sizes=[0.75, 0.25])
         print(f"\tEpochs {epochs}")
         print()
         del epochs
