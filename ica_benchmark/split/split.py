@@ -4,9 +4,12 @@ from warnings import warn, filterwarnings
 import numpy as np
 from mne import Epochs
 import mne
-from ica_benchmark.io.load import OpenBMI_Dataset
+from ica_benchmark.io.load import Dataset, OpenBMI_Dataset
 from pathlib import Path
 from ica_benchmark.utils.itertools import group_iterator, constrained_group_iterator
+from typing import Union, List, Dict, Any, Optional
+from sklearn.model_selection import BaseCrossValidator
+from copy import copy
 
 
 class Split:
@@ -39,57 +42,109 @@ class Split:
 
 
 def remove_key(d, k):
-    return {key: value for key, value in d.items() if key != k}
+    """
+    Removes a key from a dictionary and returns a copy of the modified dictionary.
+
+    Parameters
+    ----------
+    d : dict
+        The dictionary from which the key will be removed.
+    k : object
+        The key to be removed.
+
+    Returns
+    -------
+    d : dict
+        Copy of the input dictionary with the specified key removed.
+    """
+    d = copy(d)
+    d.pop(k)
+    return d
 
 
 def make_epochs_splits_indexes(
-    arr, n=None, n_splits=2, sizes=None, shuffle=False, seed=None
+    arr: Union[np.ndarray, Epochs],
+    n_splits: int = 2,
+    sizes: List[float] = None,
+    shuffle: bool = False,
+    seed: int = None,
 ):
+    """Given an array, return the indexes fot splitting it into smaller sizes.
+    For instance `make_epochs_splits_indexes(rand(100), sizes=[.2, .3, .5])` returns three
+    indexes lists, with 20%, 30% and 50% of all indexes.
+    """
+    assert np.sum(sizes) == 1.0, "sizes must sum to 1!"
+
     if not isinstance(arr, (Epochs,)):
         arr = np.array(arr)
 
     if seed:
         np.random.seed(seed)
 
-    if n is None:
-        if isinstance(arr, Epochs):
-            n = len(arr.events)
-        else:
-            n = len(arr)
+    n = len(arr.events) if isinstance(arr, Epochs) else len(arr)
 
     sizes = sizes or [1 / n_splits] * n_splits
 
-    assert np.sum(sizes) == 1.0
-
-    sizes = np.cumsum([0] + [int(size * n) for size in sizes])
-
+    sizes = np.cumsum([int(size * n) for size in sizes[:-1]])
     idx = np.arange(n)
+
     if shuffle:
         np.random.shuffle(idx)
-    slices = [slice(start, end) for start, end in zip(sizes[:-1], sizes[1:])]
-    indexes = [idx[s] for s in slices]
+
+    indexes = np.split(idx, sizes)
     return indexes
 
 
-def make_epochs_splits(arr, n=None, n_splits=2, sizes=None, shuffle=False, seed=None):
+def make_epochs_splits(
+    arr: Union[np.ndarray, Epochs],
+    n_splits: int = 2,
+    sizes: Optional[List[float]] = None,
+    shuffle: bool = False,
+    seed: int = None,
+):
+    """
+    Splits an array an Epochs object smaller sized objects.
+
+    Parameters
+    ----------
+    arr : List[Union[np.ndarray, Epochs]]
+        Array or list of `np.ndarray` or `Epochs` instances to be split.
+    n_splits : int, optional
+        Number of splits. Default is 2.
+    sizes : Optional[List[int]], optional
+        Sizes of each split.
+    shuffle : bool, optional
+        Whether to shuffle the input before splitting. Default is False.
+    seed : Optional[int], optional
+        Seed for shuffling the input.
+
+    Returns
+    -------
+    arrs : List[Union[np.ndarray, Epochs]]
+        List of arrays or lists resulting from the splitting of the input `arr`.
+    """
     indexes = make_epochs_splits_indexes(
-        arr, n=n, n_splits=n_splits, sizes=sizes, shuffle=shuffle, seed=seed
+        arr, n_splits=n_splits, sizes=sizes, shuffle=shuffle, seed=seed
     )
     arrs = [arr[idx] for idx in indexes]
     return arrs
 
 
-def constrained_split_group_iterator(split_kwargs_dicts):
-
-    for iteration_splits_kwargs in group_iterator(split_kwargs_dicts):
-        yield [
-            Split([dict(**split_kwargs) for split_kwargs in splits_kwargs_list])
-            for splits_kwargs_list in iteration_splits_kwargs
-        ]
-
-
 def splits_from_group_iterator(group_iterator_instance):
+    """
+    Generate Splits from a group iterator instance
 
+    Parameters
+    ----------
+    group_iterator_instance : Iterator
+        Instance of the iterator that contains the splits information.
+        Preferably created with group_iterator`
+
+    Returns
+    -------
+    splits : List[Split]
+        List of generated splits
+    """
     for iteration_splits_kwargs in group_iterator_instance:
         yield [
             Split([dict(**split_kwargs) for split_kwargs in splits_kwargs_list])
@@ -97,13 +152,51 @@ def splits_from_group_iterator(group_iterator_instance):
         ]
 
 
-def split_group_iterator(split_kwargs_dicts):
-    return splits_from_group_iterator(group_iterator(split_kwargs_dicts))
+def split_group_iterator(split_kwargs_dicts: List[Dict[str, List[Any]]]):
+    """
+    Generate Splits from a list of kwargs.
+
+    Parameters
+    ----------
+    split_kwargs_dicts : List[Dict[str, List[Any]]]]
+        List of kwargs dictionaries.
+
+    Returns
+    -------
+    splits_iterator : iterator
+        Iterator for splits. Is a three-depth list.
+    """
+    splits_iterator = splits_from_group_iterator(group_iterator(split_kwargs_dicts))
+    return splits_iterator
 
 
 def create_split_group_iterator(
     outer_split_kwargs=None, inner_split_kwargs=None, merge_kwargs=None
 ):
+    """Create a 3-level (in depth) iterator.
+    Outer split kwargs refers to kwargs common in the outmost level.
+    Inner split kwargs refers to kwargs common in the mid-level, and can be interpreted as the train and test sets.
+    Merge kwargs refers to kwargs common for a set.
+
+    Example
+
+    create_split_group_iterator(
+        dict(uid=[1, 2]),
+        dict(session=[1, 2]),
+        dict(run=[1, 2]
+    )
+    returns
+    [
+        [
+            "Split({'uid': 1, 'session': 1, 'run': 1},{'uid': 1, 'session': 1, 'run': 2})",
+            "Split({'uid': 1, 'session': 2, 'run': 1},{'uid': 1, 'session': 2, 'run': 2})"
+        ],
+        [
+            "Split({'uid': 2, 'session': 1, 'run': 1},{'uid': 2, 'session': 1, 'run': 2})",
+            "Split({'uid': 2, 'session': 2, 'run': 1},{'uid': 2, 'session': 2, 'run': 2})"
+        ]
+    ]
+    """
     outer_split_kwargs = outer_split_kwargs or dict()
     inner_split_kwargs = inner_split_kwargs or dict()
     merge_kwargs = merge_kwargs or dict()
@@ -117,7 +210,23 @@ def create_split_group_iterator(
     )
 
 
-def create_splitter_constraint_fn(splitter, uids):
+def create_splitter_constraint_fn(splitter: BaseCrossValidator, uids: List[str]):
+    """
+    Creates a constraint function that checks if a volunteer with a specific UID is in the training or testing group for a particular fold.
+
+    Parameters
+    ----------
+    splitter : object
+        An object with a `split` method that returns indices for splitting the data into folds.
+    uids : list
+        List of unique IDs for each volunteer.
+
+    Returns
+    -------
+    my_constraint_fn : function
+        Constraint function that takes in level, level_idx_dict, kwargs and returns kwargs, r. `r` is True if the UID specified in `kwargs` is in the training or testing group for the fold specified in `kwargs`.
+    """
+
     # Creates a dataframe with columns fold, uid and group (train or test)
     # It is only used to later check if volunteer with uid is in train or test for each fold.
     uids = np.array(uids)
@@ -153,7 +262,10 @@ def create_splitter_constraint_fn(splitter, uids):
     return my_constraint_fn
 
 
-def kfold_split_group_iterator(splitter, uids, n_groups=2):
+def kfold_split_group_iterator(
+    splitter: BaseCrossValidator, uids: List[str], n_groups: int = 2
+):
+    """Util function for creating a split iterator of a KFold splitter."""
 
     kfold_iterable = constrained_group_iterator(
         [
@@ -171,9 +283,48 @@ def kfold_split_group_iterator(splitter, uids, n_groups=2):
 
 
 class Splitter:
+    """
+    This class is responsible to return a fold iterator for a dataset in many ways:
+        - inter_subject
+        - inter_session
+        - intra_session_intra_run
+        - intra_session_inter_run
+        - intra_session_intra_run_merged
+
+    [TODO] Make intra run protocols use "splitter" for splitting train and test
+
+    Parameters
+    ----------
+    dataset : Dataset
+        The dataset to be used for splitting.
+    uids : List[str]
+        List of unique IDs of the samples in the dataset.
+    sessions : List[int]
+        List of session IDs corresponding to each sample.
+    runs : List[int]
+        List of run IDs corresponding to each sample.
+    load_kwargs : Dict, optional
+        Keyword arguments for loading the dataset, by default None.
+    splitter : Optional[BaseCrossValidator], optional
+        Object responsible for splitting the dataset for the inter subject protocol, by default None.
+    intra_session_shuffle : bool, optional
+        Whether to shuffle the samples within each session, by default False.
+    fold_sizes : List[float], optional
+        List of float values representing the size of each fold, by default None.
+    seed : Optional[int], optional
+        Seed for random number generator, by default None.
+    """
+
     # [TODO] Make intra run protocols use "splitter" for splitting train and test
 
     SESSION_KWARGS = dict(intra=dict(), inter=dict())
+    VALID_MODES = [
+        "inter_subject",
+        "inter_session",
+        "intra_session_intra_run",
+        "intra_session_inter_run",
+        "intra_session_intra_run_merged",
+    ]
 
     def default_splitter(self):
         splitter = KFold(4)
@@ -182,16 +333,15 @@ class Splitter:
 
     def __init__(
         self,
-        dataset,
-        uids,
-        sessions,
-        runs,
-        load_kwargs=None,
-        splitter=None,
-        unsafe=False,
-        intra_session_shuffle=False,
-        fold_sizes=None,
-        seed=None,
+        dataset: Dataset,
+        uids: List[str],
+        sessions: List[int],
+        runs: List[int],
+        load_kwargs: Dict = None,
+        splitter: Optional[BaseCrossValidator] = None,
+        intra_session_shuffle: bool = False,
+        fold_sizes: List[float] = None,
+        seed: Optional[int] = None,
     ):
         self.dataset = dataset
         self.uids = uids
@@ -204,18 +354,12 @@ class Splitter:
         self.seed = seed
 
     def validate_config(self, mode):
-        valid_modes = [
-            "inter_subject",
-            "inter_session",
-            "intra_session_intra_run",
-            "intra_session_inter_run",
-            "intra_session_intra_run_merged",
-        ]
+
         fold_sizes = self.fold_sizes
         assert (
-            mode in valid_modes
+            mode in self.VALID_MODES
         ), "Please choose one mode among the following: {}".format(
-            ", ".join(valid_modes)
+            ", ".join(self.VALID_MODES)
         )
         if mode == "inter_subject":
             if fold_sizes is not None:
@@ -291,7 +435,18 @@ class Splitter:
         return intra_session_iterator
 
     def yield_splits_epochs(self, mode):
+        """Yields the fold splits and epochs for the specified mode.
 
+        Parameters
+        ----------
+        mode : str
+            The mode to split the data into folds.
+
+        Returns
+        -------
+        Generator
+            Yields the fold splits and epochs for the specified mode.
+        """
         split_fn_dict = dict(
             # Intra subject, inter session
             inter_session=self.inter_session,
@@ -306,12 +461,7 @@ class Splitter:
         )
 
         split_fn = split_fn_dict[mode]
-        for fold_splits in split_fn():
-
-            # if (len(fold_splits) == 1) and (fold_sizes is None):
-            #     warn("This splitter return only one split and you passed no fold sizes for intra splitting. Is this what you want?")
-
-            yield fold_splits
+        return split_fn()
 
     def load_from_splits(self, splits, fold_sizes=None):
         fold_sizes = fold_sizes or self.fold_sizes
