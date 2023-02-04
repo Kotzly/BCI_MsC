@@ -189,26 +189,14 @@ class Dataset(ABC):
         assert session in self.SESSIONS, "You asked for session {}, but the available sessions are {}".format(session, self.SESSIONS)
         return session
 
-    def _validate_run(self, run, train=None):
+    def _validate_run(self, run):
         if run is None:
-            if train is None:
-                warn(
-                    f"Using run 1, as you did not pass the session argument. Using the first session, but you can choose the runs: {self.RUNS}.",
-                    DefaultSessionWarning,
-                )
-                run = 1
-            elif train:
-                warn(
-                    "Using run {} because you used train=True. In the future the train argument may be deprecated.".format(self.RUN_FOLD_DICT["train"]),
-                    DefaultSessionWarning,
-                )
-                run = self.RUN_FOLD_DICT["train"]
-            else:
-                warn(
-                    "Using run {} because you used train=False. In the future the train argument may be deprecated.".format(self.RUN_FOLD_DICT["test"]),
-                    DefaultSessionWarning,
-                )
-                run = self.RUN_FOLD_DICT["test"]
+            warn(
+                f"Using run 1, as you did not pass the session argument. Using the first session, but you can choose the runs: {self.RUNS}.",
+                DefaultSessionWarning,
+            )
+            run = 1
+
         assert run in self.RUNS, "You asked for run {}, but the available runs are {}".format(run, self.RUNS)
 
         return run
@@ -246,10 +234,6 @@ class BCI_IV_Comp_Dataset(Dataset):
 
     SESSIONS = [1, 2]
     RUNS = [1]
-    RUN_FOLD_DICT = dict(
-        train=1,
-        test=2
-    )
 
     HAS_LABELS = [1]
 
@@ -277,9 +261,9 @@ class BCI_IV_Comp_Dataset(Dataset):
         return filepath_df
 
     @Dataset.uid_decorator
-    def load_subject(self, uid, session=None, run=None, train=None, **kwargs):
+    def load_subject(self, uid, session=None, run=None, **kwargs):
         session = self._validate_session(session)
-        run = self._validate_run(run, train=train)
+        run = self._validate_run(run)
 
         filepaths_df = self.list_subject_filepaths()
         filepath = (
@@ -320,10 +304,6 @@ class OpenBMI_Dataset(Dataset):
 
     SESSIONS = [1, 2]
     RUNS = [1, 2]
-    RUN_FOLD_DICT = dict(
-        train=1,
-        test=2
-    )
 
     @classmethod
     def uid_from_filepath(self, filepath):
@@ -347,10 +327,10 @@ class OpenBMI_Dataset(Dataset):
         return filepath_df
 
     @Dataset.uid_decorator
-    def load_subject(self, uid, session=None, run=None, train=None, **kwargs):
+    def load_subject(self, uid, session=None, run=None, **kwargs):
 
         session = self._validate_session(session)
-        run = self._validate_run(run, train=train)
+        run = self._validate_run(run)
 
         filepaths_df = self.list_subject_filepaths()
         filepath = (
@@ -453,7 +433,6 @@ class Physionet_2009_Dataset(Dataset):
 
     SESSIONS = list()
     RUNS = list()
-    RUN_FOLD_DICT = dict()
 
     # [TODO] This @classmethod followd by @property is not a usual thing to do,
     # so maybe it would be better to change it?
