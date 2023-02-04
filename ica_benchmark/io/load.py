@@ -245,7 +245,7 @@ class BCI_IV_Comp_Dataset(Dataset):
     FILE_LOADER_FN = read_raw_gdf
 
     SESSIONS = [1, 2]
-    RUNS = [1, 2]
+    RUNS = [1]
     RUN_FOLD_DICT = dict(
         train=1,
         test=2
