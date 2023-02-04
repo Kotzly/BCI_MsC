@@ -430,17 +430,21 @@ class Physionet_2009_Dataset(Dataset):
     # Trial 13: Task 3
     # Trial 14: Task 4
 
+    # [TODO] Make as Taskes 3 to 6 are run 1, 7 to 10 are run 2, and 11 to 14 are run 3
+
     EOG_CHANNELS = []
 
     REJECT_MAGNITUDE = 1e-4
 
     SUBJECT_INFO_KEYS = ["id", "sex", "birthday", "name"]
 
-    SESSIONS = list()
-    RUNS = list()
+    SESSIONS = [1]
+    RUNS = [1]
 
     # [TODO] This @classmethod followd by @property is not a usual thing to do,
-    # so maybe it would be better to change it?
+    # so maybe it would be better to change it? The issue is that it would not 
+    # be trivial where to put trials 0 and 1. Maybe create 14 runs and keep
+    # the trial and task logic alongside it?
     @classmethod
     @property
     def TRIAL_INFO_DF(cls):
@@ -518,7 +522,8 @@ class Physionet_2009_Dataset(Dataset):
     @Dataset.uid_decorator
     def load_subject(self, uid, tasks=None, trials=None, session=None, run=None, **kwargs):
 
-        # Session and run are not used, just here for compatibility
+        session = self._validate_session(session)
+        run = self._validate_run(run)
 
         tasks = tasks or self.TASKS
         trials = trials or self.TRIALS
@@ -529,6 +534,8 @@ class Physionet_2009_Dataset(Dataset):
             filepaths_df.query("uid == @uid")
             .query("task in @tasks")
             .query("trial in @trials")
+            .query("session == @session")
+            .query("run == @run")
             .path.apply(Path)
         )
 
