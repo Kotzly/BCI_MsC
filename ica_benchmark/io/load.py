@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import re
 from warnings import warn
-
+import numpy as np
 
 PRELOAD = False
 
@@ -284,6 +284,11 @@ class BCI_IV_Comp_Dataset(Dataset):
                 pd.read_csv(test_label_filepath, header=None).to_numpy().flatten() - 1
             )
             epochs.events[:, 2] = events
+            epochs.event_id = {
+                str(v): v
+                for v in
+                sorted(np.unique(events))
+            }
         return epochs, events
 
 
