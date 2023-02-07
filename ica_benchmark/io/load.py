@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import re
 from warnings import warn
-
+import numpy as np
 
 PRELOAD = False
 
@@ -14,15 +14,34 @@ class DefaultSessionWarning(Warning):
     pass
 
 
-class class_or_instancemethod(classmethod):
-    def __get__(self, instance, type_):
-        descr_get = super().__get__ if instance is None else self.__func__.__get__
-        return descr_get(instance, type_)
-
-
 class Dataset(ABC):
+    """In the load_subject function we use the session and run notations.
+    Session refers to one time that the subject has put on the EEG equipment until it removes it.
+    The run refers to one repetition of the whole protocol.
+
+    In the BCI IV Competition dataset, the run refers to the Train and Test sets.
+    In the OpenBMI dataset, the run also refers to the Train and Test sets.
+
+    """
+
     def __init__(self, dataset_path):
         self.dataset_path = Path(dataset_path)
+
+    def uid_decorator(fn):
+        def decorated(*args, **kwargs):
+            # load_subject function returns the epochs and the events
+            epochs, events = fn(*args, **kwargs)
+            # uid is the second argument
+            uid = args[1]
+            epochs.info.update(
+                dict(
+                    subject_info=dict(
+                        uid=uid
+                    )
+                )
+            )
+            return epochs, events
+        return decorated
 
     @property
     @abstractmethod
@@ -65,7 +84,6 @@ class Dataset(ABC):
         tmax=0.7,
         reject=None,
         load_eog=False,
-        has_labels=True,
         verbose=None
     ):
         # Default value of MNE is to not reject but default from
@@ -81,7 +99,7 @@ class Dataset(ABC):
         )
         events, _ = events_from_annotations(
             raw_obj,
-            event_id=cls.EVENT_MAP_DICT if has_labels else cls.UNKNOWN_EVENT_MAP_DICT,
+            event_id=cls.EVENT_MAP_DICT,
             verbose=verbose,
         )
 
@@ -161,6 +179,28 @@ class Dataset(ABC):
         uids = self.list_subject_filepaths().uid.unique()
         return uids
 
+    def _validate_session(self, session):
+        if session is None:
+            warn(
+                f"Using session 1, as you did not pass the session argument. Using the first session, but you can choose the sessions: {self.SESSIONS}.",
+                DefaultSessionWarning,
+            )
+            session = 1
+        assert session in self.SESSIONS, "You asked for session {}, but the available sessions are {}".format(session, self.SESSIONS)
+        return session
+
+    def _validate_run(self, run):
+        if run is None:
+            warn(
+                f"Using run 1, as you did not pass the session argument. Using the first session, but you can choose the runs: {self.RUNS}.",
+                DefaultSessionWarning,
+            )
+            run = 1
+
+        assert run in self.RUNS, "You asked for run {}, but the available runs are {}".format(run, self.RUNS)
+
+        return run
+
 
 class BCI_IV_Comp_Dataset(Dataset):
 
@@ -170,9 +210,6 @@ class BCI_IV_Comp_Dataset(Dataset):
         "771": 2,
         "772": 3,
         # "768": 4,
-    }
-
-    UNKNOWN_EVENT_MAP_DICT = {
         "783": 10,
     }
 
@@ -195,35 +232,51 @@ class BCI_IV_Comp_Dataset(Dataset):
 
     FILE_LOADER_FN = read_raw_gdf
 
+    SESSIONS = [1, 2]
+    RUNS = [1]
+
+    HAS_LABELS = [1]
+
     def __init__(self, dataset_path, test_folder=None):
         super(BCI_IV_Comp_Dataset, self).__init__(dataset_path)
         self.test_folder = test_folder or self.dataset_path
         self.test_folder = Path(self.test_folder)
 
-    def get_uid_filename(self, uid, train=False):
-        return "A{}{}.gdf".format(str(uid).rjust(2, "0"), "T" if train else "E")
-
+    @classmethod
     def uid_from_filepath(self, filepath):
         return re.search("A0([0-9])[ET].gdf", filepath.name).group(1)
 
     def list_subject_filepaths(self) -> pd.DataFrame:
         filepaths = self.dataset_path.glob("A*.gdf")
         filepaths_list = [
-            (str(filepath), "T" in filepath.name, self.uid_from_filepath(filepath))
+            (
+                str(filepath),
+                1 if "T" in filepath.name else 2,
+                1,
+                self.uid_from_filepath(filepath)
+            )
             for filepath in filepaths
         ]
-        filepath_df = pd.DataFrame(filepaths_list, columns=["path", "train", "uid"])
+        filepath_df = pd.DataFrame(filepaths_list, columns=["path", "session", "run", "uid"])
         return filepath_df
 
-    def load_subject(self, uid, train=False, **kwargs):
+    @Dataset.uid_decorator
+    def load_subject(self, uid, session=None, run=None, **kwargs):
+        session = self._validate_session(session)
+        run = self._validate_run(run)
+
         filepaths_df = self.list_subject_filepaths()
         filepath = (
-            filepaths_df.query("uid == @uid").query("train == @train").path.item()
+            filepaths_df
+            .query("uid == @uid")
+            .query("session == @session")
+            .query("run == @run")
+            .path.item()
         )
         epochs, _ = self.load_from_filepath(
-            filepath, as_epochs=True, has_labels=train, **kwargs
+            filepath, as_epochs=True, **kwargs
         )
-        if train:
+        if session in self.HAS_LABELS:
             events = epochs.events[:, 2].flatten()
         else:
             test_label_filepath = self.test_folder / "A0{}E.csv".format(uid)
@@ -231,6 +284,11 @@ class BCI_IV_Comp_Dataset(Dataset):
                 pd.read_csv(test_label_filepath, header=None).to_numpy().flatten() - 1
             )
             epochs.events[:, 2] = events
+            epochs.event_id = {
+                str(v): v
+                for v in
+                sorted(np.unique(events))
+            }
         return epochs, events
 
 
@@ -241,8 +299,6 @@ class OpenBMI_Dataset(Dataset):
         "2": 1,
     }
 
-    UNKNOWN_EVENT_MAP_DICT = {}
-
     REJECT_MAGNITUDE = 1e-3
 
     SUBJECT_INFO_KEYS = ["id", "sex", "birthday", "name"]
@@ -251,6 +307,10 @@ class OpenBMI_Dataset(Dataset):
 
     EOG_CHANNELS = list()
 
+    SESSIONS = [1, 2]
+    RUNS = [1, 2]
+
+    @classmethod
     def uid_from_filepath(self, filepath):
         return re.search("([0-9]+)_[\w]+.edf", filepath.name).group(1)
 
@@ -260,34 +320,27 @@ class OpenBMI_Dataset(Dataset):
         filepaths_list = [
             (
                 str(filepath),
-                "train" in filepath.name,
                 int(filepath.parts[-2][-1]),
+                1 if ("train" in filepath.name) else 2,
                 self.uid_from_filepath(filepath),
             )
             for filepath in filepaths
         ]
         filepath_df = pd.DataFrame(
-            filepaths_list, columns=["path", "train", "session", "uid"]
+            filepaths_list, columns=["path", "session", "run", "uid"]
         )
         return filepath_df
 
-    def _validate_session(self, session):
-        if session is None:
-            warn(
-                "Using session 1, as you did not pass the session argument. Using the first session, but you can choose either 1 or 2.",
-                DefaultSessionWarning,
-            )
-            session = 1
-        return session
-
-    def load_subject(self, uid, session=None, train=False, **kwargs):
+    @Dataset.uid_decorator
+    def load_subject(self, uid, session=None, run=None, **kwargs):
 
         session = self._validate_session(session)
+        run = self._validate_run(run)
 
         filepaths_df = self.list_subject_filepaths()
         filepath = (
             filepaths_df.query("uid == @uid")
-            .query("train == @train")
+            .query("run == @run")
             .query("session == @session")
             .path.item()
         )
@@ -377,7 +430,7 @@ class Physionet_2009_Dataset(Dataset):
     # Trial 13: Task 3
     # Trial 14: Task 4
 
-    UNKNOWN_EVENT_MAP_DICT = {}
+    # [TODO] Make as Taskes 3 to 6 are run 1, 7 to 10 are run 2, and 11 to 14 are run 3
 
     EOG_CHANNELS = []
 
@@ -385,8 +438,13 @@ class Physionet_2009_Dataset(Dataset):
 
     SUBJECT_INFO_KEYS = ["id", "sex", "birthday", "name"]
 
+    SESSIONS = [1]
+    RUNS = [1]
+
     # [TODO] This @classmethod followd by @property is not a usual thing to do,
-    # so maybe it would be better to change it?
+    # so maybe it would be better to change it? The issue is that it would not 
+    # be trivial where to put trials 0 and 1. Maybe create 14 runs and keep
+    # the trial and task logic alongside it?
     @classmethod
     @property
     def TRIAL_INFO_DF(cls):
@@ -394,8 +452,7 @@ class Physionet_2009_Dataset(Dataset):
             [
                 [1, "baseline_open", "10"],
                 [2, "baseline_closed", "11"],
-            ]
-            + [
+            ] + [
                 [i, cls.TASK_DICT[(i - 3) % 4 + 1], str((i - 3) % 4 + 1)]
                 for i in range(3, 14 + 1)
             ],
@@ -436,12 +493,18 @@ class Physionet_2009_Dataset(Dataset):
     def list_subject_filepaths(self) -> pd.DataFrame:
         filepaths = self.dataset_path.glob("**/*.edf")
         filepaths_list = [
-            (str(filepath), *self.parse_filepath_info(filepath).values())
+            (
+                str(filepath),
+                *self.parse_filepath_info(filepath).values()
+            )
             for filepath in filepaths
         ]
         filepath_df = pd.DataFrame(
             filepaths_list, columns=["path", "uid", "trial", "task"]
         )
+        filepath_df["run"] = 1  # Dummy run
+        filepath_df["session"] = 1  # Dummy session
+
         return filepath_df
 
     @classmethod
@@ -456,7 +519,12 @@ class Physionet_2009_Dataset(Dataset):
             ", ".join(self.TASKS)
         )
 
-    def load_subject(self, uid, tasks=None, trials=None, **kwargs):
+    @Dataset.uid_decorator
+    def load_subject(self, uid, tasks=None, trials=None, session=None, run=None, **kwargs):
+
+        session = self._validate_session(session)
+        run = self._validate_run(run)
+
         tasks = tasks or self.TASKS
         trials = trials or self.TRIALS
         self._check_tasks(tasks)
@@ -466,6 +534,8 @@ class Physionet_2009_Dataset(Dataset):
             filepaths_df.query("uid == @uid")
             .query("task in @tasks")
             .query("trial in @trials")
+            .query("session == @session")
+            .query("run == @run")
             .path.apply(Path)
         )
 
