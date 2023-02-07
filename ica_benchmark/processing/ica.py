@@ -35,7 +35,7 @@ _ica_kwargs_dict = {
     "ext_infomax": _get_kwargs("infomax", is_extended=True),
     "picard_o": dict(method="picard", fit_params=dict(extended=True, ortho=True)),
     "whitening": _get_kwargs("whitening"),
-    "pca": _get_kwargs("pca"),
+    # "pca": _get_kwargs("pca")  # Disabled
 }
 
 
@@ -84,6 +84,28 @@ class CustomICA(ICA):
             X = X.copy()
         return self.get_sources(X)
 
+    def _compute_pre_whitener(self, data):
+        """Aux function."""
+        data = self._do_proj(data, log_suffix='(pre-whitener computation)')
+        if self.noise_cov is None:
+            # use standardization as whitener
+            # Scale (z-score) the data by channel type
+            info = self.info
+            pre_whitener = np.empty([len(data), 1])
+            for _, picks_ in _picks_by_type(info, ref_meg=False, exclude=[]):
+                pre_whitener[picks_] = np.std(data[picks_])
+            if _contains_ch_type(info, "ref_meg"):
+                picks_ = pick_types(info, ref_meg=True, exclude=[])
+                pre_whitener[picks_] = np.std(data[picks_])
+            if _contains_ch_type(info, "eog"):
+                picks_ = pick_types(info, eog=True, exclude=[])
+                pre_whitener[picks_] = np.std(data[picks_])
+        else:
+            pre_whitener, _ = compute_whitener(
+                self.noise_cov, self.info, picks=self.info.ch_names)
+            assert data.shape[0] == pre_whitener.shape[1]
+        self.pre_whitener_ = pre_whitener
+
     def _fit(self, data, fit_type):
         """Aux function."""
         random_state = check_random_state(self.random_state)
@@ -94,67 +116,19 @@ class CustomICA(ICA):
         # [TODO] Remove the PCA. The whitening step is important, but the PCA is not. To only do the ICA (plus the whitening), it is maybe necessary to remove the PCA
         # The code highly utilizes the PCA parameters, so it may be hard to remove it using the MNE code. One option could be sting the pca components to the identity matrix.
 
-        pca = _PCA(n_components=self._max_pca_components, whiten=True)
-        data = pca.fit_transform(data.T)
-        use_ev = pca.explained_variance_ratio_
-        n_pca = self.n_pca_components
-        if isinstance(n_pca, float):
-            n_pca = int(_exp_var_ncomp(use_ev, n_pca)[0])
-        elif n_pca is None:
-            n_pca = len(use_ev)
-        assert isinstance(n_pca, (int, np.int_))
-
-        # If user passed a float, select the PCA components explaining the
-        # given cumulative variance. This information will later be used to
-        # only submit the corresponding parts of the data to ICA.
-        if self.n_components is None:
-            # None case: check if n_pca_components or 0.999999 yields smaller
-            msg = "Selecting by non-zero PCA components"
-            self.n_components_ = min(n_pca, _exp_var_ncomp(use_ev, 0.999999)[0])
-        elif isinstance(self.n_components, float):
-            self.n_components_, ev = _exp_var_ncomp(use_ev, self.n_components)
-            if self.n_components_ == 1:
-                raise RuntimeError(
-                    "One PCA component captures most of the "
-                    f"explained variance ({100 * ev}%), your threshold "
-                    "results in 1 component. You should select "
-                    "a higher value."
-                )
-            msg = "Selecting by explained variance"
-        else:
-            msg = "Selecting by number"
-            self.n_components_ = _ensure_int(self.n_components)
-        # check to make sure something okay happened
-        if self.n_components_ > n_pca:
-            ev = np.cumsum(use_ev)
-            ev /= ev[-1]
-            evs = 100 * ev[[self.n_components_ - 1, n_pca - 1]]
-            raise RuntimeError(
-                f"n_components={self.n_components} requires "
-                f"{self.n_components_} PCA values (EV={evs[0]:0.1f}%) but "
-                f"n_pca_components ({self.n_pca_components}) results in "
-                f"only {n_pca} components (EV={evs[1]:0.1f}%)"
-            )
-        logger.info("%s: %s components" % (msg, self.n_components_))
-
         # the things to store for PCA
-        self.pca_mean_ = pca.mean_
-        self.pca_components_ = pca.components_
-        # Uncomment to remove PCA
-        # self.pca_components_ = np.eye(pca.components_.shape[1])
-        self.pca_explained_variance_ = pca.explained_variance_
-        del pca
+        self.pca_mean_ = None
+        self.pca_components_ = np.eye(n_channels)
+        self.pca_explained_variance_ = np.ones(n_channels)
+
+        if self.n_components is None:
+            self.n_components_ = n_channels
+        else:
+            self.n_components_ = _ensure_int(self.n_components)
+
         # update number of components
         self._update_ica_names()
-        if self.n_pca_components is not None and self.n_pca_components > len(
-            self.pca_components_
-        ):
-            raise ValueError(
-                f"n_pca_components ({self.n_pca_components}) is greater than "
-                f"the number of PCA components ({len(self.pca_components_)})"
-            )
 
-        # take care of ICA
         sel = slice(0, self.n_components_)
         if self.method == "fastica":
             from sklearn.decomposition import FastICA
@@ -187,12 +161,15 @@ class CustomICA(ICA):
             self.n_iter_ = n_iter + 1  # picard() starts counting at 0
             del _, n_iter
         elif self.method == "whitening":
-            self.pca_components_ = np.eye(self.pca_components_.shape[1])
-            self.unmixing_matrix_ = np.eye(data.shape[1])
-            self.n_iter = 1
+            # [TODO] this doesn't seem right
+            self.unmixing_matrix_ = np.eye(n_channels)
+            self.n_iter_ = 1
         elif self.method == "pca":
-            self.unmixing_matrix_ = np.eye(data.shape[1])
-            self.n_iter = 1
+            # [TODO] Disabled by now, enable in the future
+            pca = PCA(self.n_components_)
+            pca.fit(data.T)
+            self.unmixing_matrix_ = pca
+            self.n_iter_ = 1
         elif self.method in _coro_kwargs_dict:
             kwargs = _coro_kwargs_dict[self.method]
             coroica_constructor = UwedgeICA if self.method != "coro" else CoroICA
@@ -215,23 +192,7 @@ class CustomICA(ICA):
             self.n_iter_ = sobi_ica.counter + 1
 
         assert self.unmixing_matrix_.shape == (self.n_components_,) * 2
-        norms = self.pca_explained_variance_
-        stable = norms / norms[0] > 1e-6  # to be stable during pinv
-        norms = norms[: self.n_components_]
-        if not stable[self.n_components_ - 1]:
-            max_int = np.where(stable)[0][-1] + 1
-            warn(
-                f"Using n_components={self.n_components} (resulting in "
-                f"n_components_={self.n_components_}) may lead to an "
-                f"unstable mixing matrix estimation because the ratio "
-                f"between the largest ({norms[0]:0.2g}) and smallest "
-                f"({norms[-1]:0.2g}) variances is too large (> 1e6); "
-                f"consider setting n_components=0.999999 or an "
-                f"integer <= {max_int}"
-            )
-        norms = np.sqrt(norms)
-        norms[norms == 0] = 1.0
-        self.unmixing_matrix_ /= norms  # whitening
+
         self._update_mixing_matrix()
         self.current_fit = fit_type
 
