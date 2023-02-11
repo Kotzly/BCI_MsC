@@ -262,6 +262,7 @@ class BCI_IV_Comp_Dataset(Dataset):
 
     @Dataset.uid_decorator
     def load_subject(self, uid, session=None, run=None, **kwargs):
+
         session = self._validate_session(session)
         run = self._validate_run(run)
 
