@@ -176,7 +176,7 @@ class Dataset(ABC):
         raise NotImplementedError
 
     def list_uids(self):
-        uids = self.list_subject_filepaths().uid.unique()
+        uids = list(sorted(self.list_subject_filepaths().uid.unique()))
         return uids
 
     def _validate_session(self, session):

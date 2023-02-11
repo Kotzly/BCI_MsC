@@ -84,7 +84,11 @@ def create_gdf_obj(arr):
 
 
 class CustomICA(ICA):
-
+    
+    def fit_transform(self, X, y=None):
+        self.fit(X)
+        return self.transform(X)
+        
     def transform(self, X, copy=True):
         if copy:
             X = X.copy()
@@ -253,6 +257,7 @@ def get_ica_instance(method, n_components=None, **kwargs):
     if method in _ica_kwargs_dict:
         return CustomICA(n_components=n_components, **_ica_kwargs_dict[method], **kwargs)
     elif method in _orica_kwargs_dict:
+        kwargs.pop("random_state")
         return CBEB_ORICA(n_components=n_components, **_orica_kwargs_dict[method], **kwargs)
     return CustomICA(n_components, method=method, **kwargs)
 
