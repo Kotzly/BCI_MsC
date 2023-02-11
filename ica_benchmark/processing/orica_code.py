@@ -529,7 +529,7 @@ class CBEB_ORICA(BaseEstimator):
             return epochs.get_data()
         return epochs
 
-    def fit(self, x, y=None, scaling=1e6):
+    def fit(self, x, y=None, return_filtered=False):
 
         if isinstance(x, BaseEpochs):
             self.epochs_input = True
@@ -554,8 +554,9 @@ class CBEB_ORICA(BaseEstimator):
 
         self.ica.fit(x)
         assert n_channels == self.n_channels
+
         x = x.transpose(1, 0, 2).reshape(n_channels, -1)
-        (
+        x = (
             self.ica
             .transform(
                 x,
@@ -565,10 +566,54 @@ class CBEB_ORICA(BaseEstimator):
             .reshape(n_channels, self.n_epochs, self.n_times)
             .transpose(1, 0, 2)
         )
+
+        if return_filtered:
+            return x
         return self
 
+    def transform(self, x, y=None, as_epochs=True):
+
+        x_copy = None
+        if isinstance(x, BaseEpochs):
+            x_copy = x.copy()
+            x = x.get_data()
+
+        self.ica.mode = "constant"
+        self.ica.lm_0, self.ica.lw_0 = self.ss_lm, self.ss_lw
+
+        n_epochs, n_channels, n_times = x.shape
+        assert n_channels == self.n_channels
+
+        x = x.transpose(1, 0, 2).reshape(n_channels, -1)
+        x = (
+            self.ica
+            .transform(
+                x,
+                scaling=self.scaling,
+                save=False,
+                warm_start=True
+            )
+            .reshape(n_channels, n_epochs, n_times)
+            .transpose(1, 0, 2)
+        )
+
+        if as_epochs and (x_copy is not None):
+            return self.epochs_from_array(x, x_copy)
+
+        return x
+
+    def fit_transform(self, x, y=None, as_epochs=True):
+        if as_epochs and isinstance(x, BaseEpochs):
+            x_copy = x.copy()
+
+        x_filtered = self.fit(x, y=y, return_filtered=True)
+
+        if as_epochs:
+            return self.epochs_from_array(x_filtered, x_copy)
+        return x_filtered
+
     def _export_info(self, info, container, add_channels):
-        # Adapted from 
+        # Adapted from
         # https://github.com/mne-tools/mne-python/blob/96a4bc2e928043a16ab23682fc818cf0a3e78aef/mne/preprocessing/ica.py#L1221
         """Aux method."""
         # set channel names and info
@@ -601,6 +646,7 @@ class CBEB_ORICA(BaseEstimator):
         # https://github.com/mne-tools/mne-python/blob/96a4bc2e928043a16ab23682fc818cf0a3e78aef/mne/preprocessing/ica.py#L1185
         """Aux method."""
         out = epochs.copy()
+
         assert arr.ndim == 3
         assert arr.shape[1] == self.n_channels
         out._data = arr
@@ -610,37 +656,6 @@ class CBEB_ORICA(BaseEstimator):
         out._raw = None
         out._projector = None
         return out
-
-    def transform(self, x, y=None, as_epochs=True):
-
-        x_copy = None
-        if isinstance(x, BaseEpochs):
-            x_copy = x.copy()
-            x = x.get_data()
-
-        self.ica.mode = "constant"
-        self.ica.lm_0, self.ica.lw_0 = self.ss_lm, self.ss_lw
-
-        n_epochs, n_channels, n_times = x.shape
-        assert n_channels == self.n_channels
-
-        x = x.transpose(1, 0, 2).reshape(n_channels, -1)
-        x = (
-            self.ica
-            .transform(
-                x,
-                scaling=self.scaling,
-                save=False,
-                warm_start=True
-            )
-            .reshape(n_channels, n_epochs, n_times)
-            .transpose(1, 0, 2)
-        )
-
-        if as_epochs and (x_copy is not None):
-            return self.epochs_from_array(x, x_copy)
-
-        return x
 
 
 def plot_various(x, n=6, d=1, figsize=(20, 5), ax=None, show=True, title=""):
