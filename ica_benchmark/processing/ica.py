@@ -13,8 +13,7 @@ import numpy as np
 
 from ica_benchmark.processing.jade import JadeICA
 from ica_benchmark.processing.sobi import SOBI
-from ica_benchmark.processing.whitening import Whitening
-from sklearn.decomposition import PCA
+from ica_benchmark.processing.orica_code import CBEB_ORICA
 from coroica import UwedgeICA, CoroICA
 import warnings
 
@@ -53,13 +52,20 @@ _jade_kwargs_dict = {"jade": dict()}
 
 _sobi_kwargs_dict = {"sobi": dict(lags=100)}
 
+_orica_kwargs_dict = {
+    "orica": dict(n_sub=0),
+    "orica 0": dict(n_sub=0),
+    "orica 1": dict(n_sub=1),
+    "orica 2": dict(n_sub=2),
+}
 
 _all_methods = list(
     {
         **_ica_kwargs_dict,
         **_coro_kwargs_dict,
         **_jade_kwargs_dict,
-        **_sobi_kwargs_dict
+        **_sobi_kwargs_dict,
+        **_orica_kwargs_dict
     }
 )
 
@@ -246,6 +252,8 @@ def get_all_methods():
 def get_ica_instance(method, n_components=None, **kwargs):
     if method in _ica_kwargs_dict:
         return CustomICA(n_components=n_components, **_ica_kwargs_dict[method], **kwargs)
+    elif method in _orica_kwargs_dict:
+        return CBEB_ORICA(n_components=n_components, **_orica_kwargs_dict[method], **kwargs)
     return CustomICA(n_components, method=method, **kwargs)
 
 
