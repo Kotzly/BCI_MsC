@@ -1,19 +1,16 @@
+from mne import BaseEpochs
 from sklearn.base import BaseEstimator
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 from collections import namedtuple
-# This solves mpl foor loop memory leak for some reason
 import matplotlib
 from scipy.stats import pearsonr as pcc
+from mne.io.constants import FIFF
+
 
 adaptative_constants = namedtuple("adaptative_constants", ["a", "b", "sigmarn"])
 
-DEBUG = True
-
-def log(string):
-    if DEBUG:
-        print(string)
 
 def match_corr(eeg, eog):
     corr_m = list()
@@ -98,11 +95,11 @@ def update_m(x, m, lambdas=.005):
     # [TODO] Check if it is possible to no use the median value, and use the full array
     # i.e. `l = 1 - lambdas`
 
-    l_avg = 1 - lambdas[len(lambdas) // 2 - 1] # In code
-    l = l_avg#1 - lambdas
+    l_avg = 1 - lambdas[len(lambdas) // 2 - 1]  # In code
+    l = l_avg  # 1 - lambdas
     # l = 1 - lambdas
 
-    Q = l / (1 - l) + np.trace(v.T @ v) / n_p # In code
+    Q = l / (1 - l) + np.trace(v.T @ v) / n_p  # In code
     # Q = (l / (1 - l) + np.diag(v.T @ v)).sum() / n_p
 
     # Division by n_p to normalize the block-wide v @ v.T multiplication]
@@ -131,11 +128,11 @@ def update_w_block(v, w, lambdas=None, n_sub=1):
     lambda_prod = np.product(1 / (1 - lambdas))
     # dot(f, y, 1) = (fy * y).sum(axis=0)
     Q = 1 + lambdas * ((fy * y).sum(axis=0) - 1)
-    I = np.eye(n_ch)
 
     w = lambda_prod * (w - y @ np.diag(lambdas / Q) @ fy.T @ w)
     w = orthogonalize(w)
     return w
+
 
 def update_w_block_paper(v, w, lambdas=None, n_sub=1):
     # Online Recursive ICA Algorithm Used for Motor Imagery EEG Signal
@@ -167,7 +164,7 @@ def update_w_block_paper(v, w, lambdas=None, n_sub=1):
     # w = lambda_prod * (w - y @ np.diag(lambdas / Q) @ fy.T @ w)
     w = lambda_prod * (I - (D / Q).sum(axis=0)) @ w
     w = orthogonalize(w)
-    
+
     return w
 
 
@@ -177,10 +174,10 @@ class ORICA(BaseEstimator):
         "constant",
         # Tracking Non-stationary EEG Sources using Adaptive Online Recursive Independent Component Analysis
         "adaptative",
-        #"adaptative_exp",
+        # "adaptative_exp",
         # Tracking Non-stationary EEG Sources using Adaptive Online Recursive Independent Component Analysis
         "decay",
-        #"pid"
+        # "pid"
     )
 
     def __init__(self, n_channels=6, size_block=4, block_update=False, stride=1, mode=None, lm_0=None, lw_0=None, gamma=None, adaptative_constants=None, n_passes=1, adap_exp_norm=1e4, tau_const=np.inf, n_sub=1):
@@ -200,13 +197,13 @@ class ORICA(BaseEstimator):
         self.tau_const = tau_const
         self.I = np.eye(n_channels)
         self.init()
-    
+
     def init(self):
         if self.mode is None:
             self.mode = "constant"
 
         assert self.mode in self.SUPPORTED_MODES
-        self.lambda_const = 1-np.exp(-1/(self.tau_const))
+        self.lambda_const = 1 - np.exp(-1 / (self.tau_const))
         if self.gamma is None:
             self.gamma = 0.6
 
@@ -221,7 +218,7 @@ class ORICA(BaseEstimator):
             # self.adaptative_constants = adaptative_constants(.03, .012, 0.05)
             # MYCHANGE
             self.adaptative_constants = adaptative_constants(.03, .012, 0.05)
-        
+
         self.w_0 = self.m_0 = self.I
         self.w = None
         self.m = None
@@ -322,13 +319,13 @@ class ORICA(BaseEstimator):
 
         elif self.mode == "adaptative_exp":
             sigma = self.NSI(y)
-            l = 1 - np.exp(- sigma / self.adap_exp_norm)
-            lm, lw = l, l
+            ll = 1 - np.exp(- sigma / self.adap_exp_norm)
+            lm, lw = ll, ll
 
         assert not any(np.isnan(lm))
         assert not any(np.isnan(lw))
-    
-        return lm , lw, sigma
+
+        return lm, lw, sigma
 
     def fit(self, x, y=None):
         pass
@@ -336,7 +333,6 @@ class ORICA(BaseEstimator):
 
     def transform_(self, X, warm_start=False):
         X_filtered = X.copy()
-        
 
         if not warm_start:
             self.m = self.m_0
@@ -360,7 +356,7 @@ class ORICA(BaseEstimator):
 
                 self.lambdas.append(lw.mean())
                 self.sigmas.append(sigma)
-        
+
         return X_filtered
 
     def transform(self, X, warm_start=False, scaling=1, save=False):
@@ -388,7 +384,7 @@ class ORICA(BaseEstimator):
             for n_pass in range(self.n_passes):
                 self.iteration = np.arange(i - self.size_block, i) + 1 + counter
                 lm, lw, sigma = self.get_lambdas(X_i, self.iteration, self.m, self.w)
-#                    print(e, n_times, e * n_times + i, max(lm), min(lm))
+                # print(e, n_times, e * n_times + i, max(lm), min(lm))
                 # [TODO use new m for w update]
                 m = update_m(X_i, self.m, lambdas=lm[-n_p:])
                 w = update_w_block(m @ X_i, self.w, lambdas=lw[-n_p:], n_sub=self.n_sub)
@@ -400,7 +396,7 @@ class ORICA(BaseEstimator):
 
                 self.lambdas.append(lw.mean())
                 self.sigmas.append(sigma)
-            
+
                 counter += self.stride
 
             if ((i % 100) < self.stride) and save:
@@ -410,7 +406,7 @@ class ORICA(BaseEstimator):
                 fig.savefig("./m/img_{}.png".format(str(im_cnt).rjust(5, "0")))
                 plt.close(fig)
                 del fig
-                
+
                 fig = plt.figure(figsize=(9, 9))
                 plt.imshow(self.w)
                 plt.colorbar()
@@ -424,13 +420,12 @@ class ORICA(BaseEstimator):
                 fig.savefig("./c/img_{}.png".format(str(im_cnt).rjust(5, "0")))
                 plt.close(fig)
                 del fig
-                
+
                 plt.close("all")
                 im_cnt += 1
 
         matplotlib.use(orig_mpl_backend)
         return X_filtered
-
 
     def transform_epochs(self, X, warm_start=False, scaling=1, save=False, verbose=True):
         orig_mpl_backend = matplotlib.get_backend()
@@ -451,15 +446,10 @@ class ORICA(BaseEstimator):
         self.lambdas = [self.lw_0]
         self.sigmas = list()
         im_cnt = 0
-        counter = 0
-        epoch_iter = range(n_epochs)
-        if verbose:
-            epoch_iter = tqdm(epoch_iter)
-        for e in epoch_iter:
+
+        for e in tqdm(range(n_epochs)):
             window_iter = range(self.size_block, n_times + self.stride, self.stride)
-            if verbose:
-                window_iter = tqdm(window_iter, leave=False)
-            for i in window_iter:
+            for i in tqdm(window_iter, leave=False):
                 X_i = X[e, :, i - self.size_block:i]
                 n_p = X_i.shape[1]
                 for n_pass in range(self.n_passes):
@@ -479,7 +469,7 @@ class ORICA(BaseEstimator):
                     self.sigmas.append(sigma)
 
                     counter += self.stride
-                
+
                 if ((i % 100) < self.stride) and save:
                     fig = plt.figure(figsize=(9, 9))
                     plt.imshow(self.m)
@@ -487,7 +477,7 @@ class ORICA(BaseEstimator):
                     fig.savefig("./m/img_{}.png".format(str(im_cnt).rjust(5, "0")))
                     plt.close(fig)
                     del fig
-                    
+
                     fig = plt.figure(figsize=(9, 9))
                     plt.imshow(self.w)
                     plt.colorbar()
@@ -501,12 +491,171 @@ class ORICA(BaseEstimator):
                     fig.savefig("./c/img_{}.png".format(str(im_cnt).rjust(5, "0")))
                     plt.close(fig)
                     del fig
-                    
+
                     plt.close("all")
                     im_cnt += 1
 
         matplotlib.use(orig_mpl_backend)
         return X_filtered
+
+
+class CBEB_ORICA(BaseEstimator):
+
+    def __init__(self, n_components=None, n_sub=0, tran_lm=.995, tran_lw=0.995, gamma=.6, ss_lm=1e-3, ss_lw=1e-3, scaling=1e6, size_block=8, stride=8):
+        self.n_channels = n_components
+        self.ss_lm = ss_lm
+        self.ss_lw = ss_lw
+        self.n_sub = n_sub
+        self.tran_lm = tran_lm
+        self.tran_lw = tran_lw
+        self.gamma = gamma
+        self.size_block = size_block
+        self.stride = stride
+        self.scaling = scaling
+
+        self.epochs_input = False
+
+    def _create_ica_names(self):
+        self._ica_names = [
+            "ICA{}".format(
+                str(i).rjust(3, "0")
+                for i in range(self.n_channels)
+            )
+        ]
+
+    def epochs_to_np(self, epochs):
+        if isinstance(epochs, BaseEpochs):
+            epochs.load_data()
+            return epochs.get_data()
+        return epochs
+
+    def fit(self, x, y=None, return_filtered=False):
+
+        if isinstance(x, BaseEpochs):
+            self.epochs_input = True
+            x = x.get_data()
+
+        self.n_epochs, n_channels, self.n_times = x.shape
+
+        if self.n_channels is None:
+            self.n_channels = n_channels
+        self._create_ica_names()
+        self.ica = ORICA(
+            mode="decay",
+            n_channels=self.n_channels,
+            block_update=True,
+            size_block=self.size_block,
+            stride=self.stride,
+            lm_0=self.tran_lm,
+            lw_0=self.tran_lw,
+            gamma=self.gamma,
+            n_sub=self.n_sub,
+        )
+
+        self.ica.fit(x)
+        assert n_channels == self.n_channels
+
+        x = x.transpose(1, 0, 2).reshape(n_channels, -1)
+        x = (
+            self.ica
+            .transform(
+                x,
+                scaling=self.scaling,
+                save=False,
+            )
+            .reshape(n_channels, self.n_epochs, self.n_times)
+            .transpose(1, 0, 2)
+        )
+
+        if return_filtered:
+            return x
+        return self
+
+    def transform(self, x, y=None, as_epochs=True):
+
+        x_copy = None
+        if isinstance(x, BaseEpochs):
+            x_copy = x.copy()
+            x = x.get_data()
+
+        self.ica.mode = "constant"
+        self.ica.lm_0, self.ica.lw_0 = self.ss_lm, self.ss_lw
+
+        n_epochs, n_channels, n_times = x.shape
+        assert n_channels == self.n_channels
+
+        x = x.transpose(1, 0, 2).reshape(n_channels, -1)
+        x = (
+            self.ica
+            .transform(
+                x,
+                scaling=self.scaling,
+                save=False,
+                warm_start=True
+            )
+            .reshape(n_channels, n_epochs, n_times)
+            .transpose(1, 0, 2)
+        )
+
+        if as_epochs and (x_copy is not None):
+            return self.epochs_from_array(x, x_copy)
+
+        return x
+
+    def fit_transform(self, x, y=None, as_epochs=True):
+        if as_epochs and isinstance(x, BaseEpochs):
+            x_copy = x.copy()
+
+        x_filtered = self.fit(x, y=y, return_filtered=True)
+
+        if as_epochs:
+            return self.epochs_from_array(x_filtered, x_copy)
+        return x_filtered
+
+    def _export_info(self, info, container, add_channels):
+        # Adapted from
+        # https://github.com/mne-tools/mne-python/blob/96a4bc2e928043a16ab23682fc818cf0a3e78aef/mne/preprocessing/ica.py#L1221
+        """Aux method."""
+        # set channel names and info
+        ch_names = []
+        ch_info = []
+        for ii, name in enumerate(self._ica_names):
+            ch_names.append(name)
+            ch_info.append(dict(
+                ch_name=name, cal=1, logno=ii + 1,
+                coil_type=FIFF.FIFFV_COIL_NONE,
+                kind=FIFF.FIFFV_MISC_CH,
+                coord_frame=FIFF.FIFFV_COORD_UNKNOWN,
+                unit=FIFF.FIFF_UNIT_NONE,
+                loc=np.zeros(12, dtype='f4'),
+                range=1.0, scanno=ii + 1, unit_mul=0))
+
+        if add_channels is not None:
+            # re-append additionally picked ch_names
+            ch_names += add_channels
+            # re-append additionally picked ch_info
+            ch_info += [k for k in container.info['chs'] if k['ch_name'] in
+                        add_channels]
+        with info._unlock(update_redundant=True, check_after=True):
+            info['chs'] = ch_info
+            info['bads'] = []
+            info['projs'] = []  # make sure projections are removed.
+
+    def epochs_from_array(self, arr, epochs):
+        # Method copied on how MNE creates a new epoch in the ICA class
+        # https://github.com/mne-tools/mne-python/blob/96a4bc2e928043a16ab23682fc818cf0a3e78aef/mne/preprocessing/ica.py#L1185
+        """Aux method."""
+        out = epochs.copy()
+
+        assert arr.ndim == 3
+        assert arr.shape[1] == self.n_channels
+        out._data = arr
+
+        self._export_info(out.info, epochs, None)
+        out.preload = True
+        out._raw = None
+        out._projector = None
+        return out
 
 
 def plot_various(x, n=6, d=1, figsize=(20, 5), ax=None, show=True, title=""):
@@ -525,10 +674,9 @@ if __name__ == "__main__":
     X, sources, W = sample_ica_data(N=1000, seed=100)
 
     ica = ORICA(mode="decay", block_update=True, size_block=8, stride=8, gamma=0.6, lm_0=.995, lw_0=.995)
-    
-    # ica.fit(X)
+
     X_filtered = ica.transform(X)
-    
+
     plot_various(X, d=1, figsize=(20, 4), title="Raw")
 
     plot_various(np.linalg.pinv(W) @ X, d=1, figsize=(20, 4), n=4, title="Estimated sources from W real")

@@ -12,6 +12,8 @@ from mne.preprocessing.ica import (
 import numpy as np
 
 from ica_benchmark.processing.jade import JadeICA
+from ica_benchmark.processing.sobi import SOBI
+from ica_benchmark.processing.orica_code import CBEB_ORICA
 from coroica import UwedgeICA, CoroICA
 import warnings
 
@@ -30,14 +32,16 @@ _ica_kwargs_dict = {
     "infomax": _get_kwargs("infomax"),
     "picard": _get_kwargs("picard", is_extended=False),
     "ext_infomax": _get_kwargs("infomax", is_extended=True),
-    "ext_picard": _get_kwargs("picard", is_extended=True),
+    "picard_o": dict(method="picard", fit_params=dict(extended=True, ortho=True)),
+    "whitening": _get_kwargs("whitening"),
+    "pca": _get_kwargs("pca"),
 }
 
 
 _coro_kwargs_dict = {
-    "sobi": dict(partitionsize=int(10 ** 6), timelags=list(range(1, 101))),  # [TODO] resolve nan issue
+    "sobi_coro": dict(partitionsize=int(10 ** 6), timelags=list(range(1, 101))),  # [TODO] resolve nan issue
     "choi_var": dict(),
-    "choi_vartd": dict(timelags=[1, 2, 3, 4, 5]),  # [TODO] resolve nan issue 
+    "choi_vartd": dict(timelags=[1, 2, 3, 4, 5]),  # [TODO] resolve nan issue
     "choi_td": dict(instantcov=False, timelags=[1, 2, 3, 4, 5]),  # [TODO] resolve nan issue
     "coro": dict(),  # [TODO] resolve nan issue
 }
@@ -46,8 +50,23 @@ _coro_kwargs_dict = {
 _jade_kwargs_dict = {"jade": dict()}
 
 
-_all_methods = (
-    list(_ica_kwargs_dict) + list(_coro_kwargs_dict) + list(_jade_kwargs_dict)
+_sobi_kwargs_dict = {"sobi": dict(lags=100)}
+
+_orica_kwargs_dict = {
+    "orica": dict(n_sub=0),
+    "orica 0": dict(n_sub=0),
+    "orica 1": dict(n_sub=1),
+    "orica 2": dict(n_sub=2),
+}
+
+_all_methods = list(
+    {
+        **_ica_kwargs_dict,
+        **_coro_kwargs_dict,
+        **_jade_kwargs_dict,
+        **_sobi_kwargs_dict,
+        **_orica_kwargs_dict
+    }
 )
 
 
@@ -65,7 +84,11 @@ def create_gdf_obj(arr):
 
 
 class CustomICA(ICA):
-
+    
+    def fit_transform(self, X, y=None):
+        self.fit(X)
+        return self.transform(X)
+        
     def transform(self, X, copy=True):
         if copy:
             X = X.copy()
@@ -77,6 +100,9 @@ class CustomICA(ICA):
         n_channels, n_samples = data.shape
         self._compute_pre_whitener(data)
         data = self._pre_whiten(data)
+
+        # [TODO] Remove the PCA. The whitening step is important, but the PCA is not. To only do the ICA (plus the whitening), it is maybe necessary to remove the PCA
+        # The code highly utilizes the PCA parameters, so it may be hard to remove it using the MNE code. One option could be sting the pca components to the identity matrix.
 
         pca = _PCA(n_components=self._max_pca_components, whiten=True)
         data = pca.fit_transform(data.T)
@@ -124,6 +150,8 @@ class CustomICA(ICA):
         # the things to store for PCA
         self.pca_mean_ = pca.mean_
         self.pca_components_ = pca.components_
+        # Uncomment to remove PCA
+        # self.pca_components_ = np.eye(pca.components_.shape[1])
         self.pca_explained_variance_ = pca.explained_variance_
         del pca
         # update number of components
@@ -140,7 +168,6 @@ class CustomICA(ICA):
         sel = slice(0, self.n_components_)
         if self.method == "fastica":
             from sklearn.decomposition import FastICA
-
             ica = FastICA(whiten=False, random_state=random_state, **self.fit_params)
             ica.fit(data[:, sel])
             self.unmixing_matrix_ = ica.components_
@@ -157,10 +184,11 @@ class CustomICA(ICA):
             del unmixing_matrix, n_iter
         elif self.method == "picard":
             from picard import picard
-
             _, W, _, n_iter = picard(
                 data[:, sel].T,
                 whiten=False,
+                # MNE already centers data using the PCA
+                centering=False,
                 return_n_iter=True,
                 random_state=random_state,
                 **self.fit_params,
@@ -168,6 +196,13 @@ class CustomICA(ICA):
             self.unmixing_matrix_ = W
             self.n_iter_ = n_iter + 1  # picard() starts counting at 0
             del _, n_iter
+        elif self.method == "whitening":
+            self.pca_components_ = np.eye(self.pca_components_.shape[1])
+            self.unmixing_matrix_ = np.eye(data.shape[1])
+            self.n_iter = 1
+        elif self.method == "pca":
+            self.unmixing_matrix_ = np.eye(data.shape[1])
+            self.n_iter = 1
         elif self.method in _coro_kwargs_dict:
             kwargs = _coro_kwargs_dict[self.method]
             coroica_constructor = UwedgeICA if self.method != "coro" else CoroICA
@@ -182,6 +217,12 @@ class CustomICA(ICA):
             jade_ica.fit(data[:, sel].T)
             self.unmixing_matrix_ = jade_ica.B
             self.n_iter_ = jade_ica.n_iter + 1
+
+        elif self.method in _sobi_kwargs_dict:
+            sobi_ica = SOBI(**_sobi_kwargs_dict[self.method])
+            sobi_ica.fit(data[:, sel])
+            self.unmixing_matrix_ = sobi_ica.W
+            self.n_iter_ = sobi_ica.counter + 1
 
         assert self.unmixing_matrix_.shape == (self.n_components_,) * 2
         norms = self.pca_explained_variance_
@@ -215,12 +256,12 @@ def get_all_methods():
 def get_ica_instance(method, n_components=None, **kwargs):
     if method in _ica_kwargs_dict:
         return CustomICA(n_components=n_components, **_ica_kwargs_dict[method], **kwargs)
+    elif method in _orica_kwargs_dict:
+        kwargs.pop("random_state")
+        return CBEB_ORICA(n_components=n_components, **_orica_kwargs_dict[method], **kwargs)
     return CustomICA(n_components, method=method, **kwargs)
 
 
 mne.preprocessing.ica._KNOWN_ICA_METHODS = list(
-    set(
-        mne.preprocessing.ica._KNOWN_ICA_METHODS
-    ) |
-    set(get_all_methods())
+    set(mne.preprocessing.ica._KNOWN_ICA_METHODS) | set(get_all_methods())
 )
