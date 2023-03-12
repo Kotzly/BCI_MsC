@@ -176,7 +176,7 @@ class Dataset(ABC):
         raise NotImplementedError
 
     def list_uids(self):
-        uids = self.list_subject_filepaths().uid.unique()
+        uids = list(sorted(self.list_subject_filepaths().uid.unique()))
         return uids
 
     def _validate_session(self, session):
@@ -262,6 +262,7 @@ class BCI_IV_Comp_Dataset(Dataset):
 
     @Dataset.uid_decorator
     def load_subject(self, uid, session=None, run=None, **kwargs):
+
         session = self._validate_session(session)
         run = self._validate_run(run)
 
