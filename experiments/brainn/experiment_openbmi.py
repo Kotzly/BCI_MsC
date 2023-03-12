@@ -17,7 +17,9 @@ from sklearn.metrics import make_scorer
 from sklearn.feature_selection import SequentialFeatureSelector
 
 from ica_benchmark.processing.ica import get_ica_instance
+from ica_benchmark.processing.orica_code import ORICA
 from ica_benchmark.io.load import OpenBMI_Dataset
+from mne import EpochsArray, create_info
 
 from utils import get_classifier, ConcatenateChannelsPSD
 from utils import alg_rename, get_PSD, is_ica_stochastic, is_stochastic, repeat_deterministic
@@ -128,6 +130,104 @@ def run(dataset, uid, load_kwargs, ica_methods=None, clf_methods=None, n_runs=10
 
                 if ica_method in ("none", None):
                     pass
+                elif "orica" in ica_method:
+
+                    n_sub = int(ica_method.split(" ")[-1])
+
+                    ICA = ORICA(
+                        mode="decay",
+                        n_channels=len(x_train.ch_names),
+                        block_update=True,
+                        size_block=8,
+                        stride=8,
+                        lm_0=.995,
+                        lw_0=.995,
+                        gamma=.6,
+                        n_sub=n_sub,
+                    )
+                    ICA.fit(x_train)
+
+                    n_epochs, n_channels, n_times = x_train.get_data().shape
+                    x = x_train.get_data().transpose(1, 0, 2).reshape(n_channels, -1)
+                    arr_train = (
+                        ICA
+                        .transform(
+                            x,
+                            scaling=1e6,
+                            save=False,
+                        )
+                        .reshape(n_channels, n_epochs, n_times)
+                        .transpose(1, 0, 2)
+                    )
+                    W = ICA.w.copy()
+                    M = ICA.m.copy()
+                    #################################################################################
+                    ICA.mode = "constant"
+                    ICA.lm_0, ICA.lw_0 = 0.001, 0.001
+                    #################################################################################
+
+                    ICA.m = M.copy()
+                    ICA.w = W.copy()
+                    n_epochs, n_channels, n_times = x_intra_test.get_data().shape
+                    x = x_intra_test.get_data().transpose(1, 0, 2).reshape(n_channels, -1)
+                    arr_intra_test = (
+                        ICA
+                        .transform(
+                            x,
+                            scaling=1e6,
+                            save=False,
+                            warm_start=True
+                        )
+                        .reshape(n_channels, n_epochs, n_times)
+                        .transpose(1, 0, 2)
+                    )
+
+                    ICA.m = M.copy()
+                    ICA.w = W.copy()
+                    n_epochs, n_channels, n_times = x_inter_test.get_data().shape
+                    x = x_inter_test.get_data().transpose(1, 0, 2).reshape(n_channels, -1)
+                    arr_inter_test = (
+                        ICA
+                        .transform(
+                            x,
+                            scaling=1e6,
+                            save=False,
+                            warm_start=True
+                        )
+                        .reshape(n_channels, n_epochs, n_times)
+                        .transpose(1, 0, 2)
+                    )
+
+                    x_train = EpochsArray(
+                        arr_train,
+                        create_info(
+                            ["ICA{}".format(str(i).rjust(3, "0")) for i in range(arr_train.shape[1])],
+                            x_train.info["sfreq"],
+                            verbose=False
+                        ),
+                        events=x_train.events,
+                        reject=None
+                    )
+                    x_intra_test = EpochsArray(
+                        arr_intra_test,
+                        create_info(
+                            ["ICA{}".format(str(i).rjust(3, "0")) for i in range(arr_intra_test.shape[1])],
+                            x_intra_test.info["sfreq"],
+                            verbose=False
+                        ),
+                        events=x_intra_test.events,
+                        reject=None
+                    )
+                    x_inter_test = EpochsArray(
+                        arr_inter_test,
+                        create_info(
+                            ["ICA{}".format(str(i).rjust(3, "0")) for i in range(arr_inter_test.shape[1])],
+                            x_inter_test.info["sfreq"],
+                            verbose=False
+                        ),
+                        events=x_inter_test.events,
+                        reject=None
+                    )
                 else:
                     ICA = get_ica_instance(ica_method, random_state=run_seed)
                     x_train = ICA.fit_transform(x_train)
@@ -274,7 +374,7 @@ if __name__ == "__main__":
 
     openbmi_dataset_folderpath = Path('/home/paulo/Documents/datasets/OpenBMI/edf/')
 
-    save_path = Path("./openbmi")
+    save_path = Path("./openbmi_noorica")
     save_path.mkdir(exist_ok=True)
 
     dataset = OpenBMI_Dataset(openbmi_dataset_folderpath)
@@ -285,8 +385,10 @@ if __name__ == "__main__":
     )
 
     N_RUNS = 3
-    clf_methods = ["random_forest", "gaussian_nb", "lda", "logistic"]
-    ica_methods = ["none", "orica 0", "orica 1", "ext_infomax", "sobi", "fastica", "picard_o"]
+    # clf_methods = ["random_forest", "gaussian_nb", "lda", "logistic"]
+    # ica_methods = ["none", "orica 0", "orica 1", "ext_infomax", "sobi", "fastica", "picard_o"]
+    clf_methods = ["lda"]
+    ica_methods = ["none", "ext_infomax", "sobi", "fastica", "picard_o"]
     results_lists = [list(), list(), list()]
     for uid in dataset.list_uids():
 
