@@ -4,6 +4,7 @@ from tqdm import tqdm
 from numpy.linalg import norm
 import random
 from sklearn.base import BaseEstimator
+from ica_benchmark.sample.iva_sample import sample_iva_data
 
 
 def init_W(K, M):
@@ -32,6 +33,11 @@ def get_random_not_orthogonal(x):
 #             raise Exception("FAIL", x, r, a)
         return r
 
+def get_random_not_orthogonal_2(W_n):
+#     print("mark")
+    temp = np.random.rand(W_n.shape[1], 1)
+    r = temp - W_n.T @ np.linalg.inv(W_n @ W_n.T) @ W_n @ temp
+    return r
 
 def recursive_h(W, sanity_check=False):
     # Adali 2010
@@ -74,7 +80,8 @@ def recursive_h(W, sanity_check=False):
 
     for n in range(M):
         W_n = W[np.arange(M) != n]
-        r = get_random_not_orthogonal(W[n]).reshape(-1, 1)
+        r = get_random_not_orthogonal_2(W_n).reshape(-1, 1)
+        # r = get_random_not_orthogonal(W[n]).reshape(-1, 1)
         P_n = np.eye(M) - W_n.T @ Q_inv[n] @ W_n
 
         h_n = P_n @ r
@@ -90,7 +97,8 @@ def get_hn(W, n, sanity_check=False):
     M, _ = W.shape
     W_n = W[np.arange(M) != n]
     Q_inv = np.linalg.inv(W_n @ W_n.T)
-    r = get_random_not_orthogonal(W[n]).reshape(-1, 1)
+    r = get_random_not_orthogonal_2(W_n).reshape(-1, 1)
+    # r = get_random_not_orthogonal(W[n]).reshape(-1, 1)
     P_n = np.eye(M) - W_n.T @ Q_inv @ W_n
 
     h_n = P_n @ r
@@ -151,6 +159,16 @@ def whitening_multivar_matrix(X):
     return B
 
 
+def whitening_cov_matrix(cov):
+    # cov = np.cov(X, rowvar=True, bias=False)
+    d, E = np.linalg.eigh(cov)
+
+    D = np.diag(d)
+    D_inv = np.sqrt(np.linalg.inv(D))
+    B = E @ D_inv @ E.T
+    return B
+
+
 def whitening_multivar(X):
     X = X.copy()
 #     cov = np.cov(X, rowvar=True, bias=False)
@@ -159,29 +177,7 @@ def whitening_multivar(X):
     return B @ X
 
 
-def sample_iva_data(K, M, N, seed=42):
-    # K number of datasets
-    # M number of SVC (electrodes)
-    # N number of samples
-    # Sample data as in Anderson 2012 (Joint Blind Source Separation With Multivariate Gaussian Model: Algorithms and Performance Analysis)
-    np.random.seed(seed)
-
-    S = np.zeros((M, N, K))
-    for m in range(M):
-        cov = np.random.normal(size=(K, K))
-        cov = cov @ cov.T
-        SCV = np.random.multivariate_normal(np.zeros(K), cov, size=N)  # K, N
-        S[m] = SCV
-    S = S.transpose(2, 0, 1)
-    assert S.shape == (K, M, N)
-
-    A = np.random.normal(0, 1, size=(K, M, M))
-    X = np.stack([a @ s for a, s in zip(A, S)])
-    assert np.all((A[0] @ S[0]) == X[0])
-    return X, S, A
-
-
-def IVA_GV(X, whiten=True, lr=1e-2, epochs=100, A=None, sanity_check=False, lr_scale=.9, seed=42):
+def IVA_GV(X, R=None, B=None, whiten=True, lr=1e-2, epochs=100, A=None, sanity_check=False, lr_scale=.9, seed=42):
     """Run IVA wiith multivariate Gaussian model with Vector Gradient descent.
 
     X is the input array and is shaped K, M, N where
@@ -191,6 +187,7 @@ def IVA_GV(X, whiten=True, lr=1e-2, epochs=100, A=None, sanity_check=False, lr_s
 
     W is the array with the weights and is shaped K, M, M (one M,M matrix per dataset)
     Based on Joint Blind Source Separation With Multivariate Gaussian Model: Algorithms and Performance Analysis
+    Also based in https://github.com/trendscenter/gift/blob/8c53569745e6ecf475895ce515b7356567f8e1fb/GroupICAT/icatb/icatb_analysis_functions/icatb_algorithms/icatb_iva_second_order.m
     """
 
     # Z = np.stack([whitening_multivar(z) for z in Z])
@@ -202,12 +199,24 @@ def IVA_GV(X, whiten=True, lr=1e-2, epochs=100, A=None, sanity_check=False, lr_s
     np.random.seed(seed)
     random.seed(seed)
 
-    K, M, N = X.shape
+    # Epochs = iterations of gradient descent
+    if R is None:
 
-    B = np.stack([np.eye(M, M) for _ in range(K)])
-    if whiten:
-        B = np.stack([whitening_multivar_matrix(x) for x in X])
-    Z = np.stack([b @ x for b, x in zip(B, X)])
+        K, M, N = X.shape
+        
+        B = np.stack([np.eye(M, M) for _ in range(K)])
+        if whiten:
+            B = np.stack([whitening_multivar_matrix(x) for x in X])
+        Z = np.stack([b @ x for b, x in zip(B, X)])
+    
+        R = np.empty((K, K, M, M))
+        for k1 in range(K):
+            for k2 in range(K):
+                R[k1, k2] = Z[k1] @ Z[k2].T / N
+    else:
+        K, _, M, _ = R.shape
+        assert R.shape == (K, K, M, M)
+
 
     # If whitening is considered, it is like assuming that the real Mixing matrix is premultiplied by B
     # Because:
@@ -215,6 +224,7 @@ def IVA_GV(X, whiten=True, lr=1e-2, epochs=100, A=None, sanity_check=False, lr_s
     # Z = A' @ S, with Z = B @ X and A' = B @ A
     if A is None:
         A = np.random.rand(K, M, M)
+    B = B if B is not None else np.eye(M, M)
     A = B @ A
 
     grad_norm_history = np.empty((K, M, epochs))
@@ -224,12 +234,6 @@ def IVA_GV(X, whiten=True, lr=1e-2, epochs=100, A=None, sanity_check=False, lr_s
     ISI_history = np.empty(epochs)
     ISR_history = np.empty(epochs)
     W = np.stack([np.eye(M) for _ in range(K)])
-
-    # Epochs = iterations of gradient descent
-    R = np.empty((K, K, M, M))
-    for k1 in range(K):
-        for k2 in range(K):
-            R[k1, k2] = Z[k1] @ Z[k2].T / N
 
     pbar = tqdm(range(epochs))
     for i in pbar:
@@ -241,10 +245,17 @@ def IVA_GV(X, whiten=True, lr=1e-2, epochs=100, A=None, sanity_check=False, lr_s
 
         # Weight matrices update loops
         # Iterate every dataset
-        # H = np.stack([non_recursive_h(W[k], sanity_check=sanity_check) for k in range(K)]) # K x M x M x 1
+
+        # Ideally we would use the following line to calculate the h_n_k vectors, but it only really
+        # speed ups computations for high M values ( > 100), where the get_hn function (which calls
+        # the inverse calculation) many times.
+        # Here we do use this version of the calculation since it is the version described in Anderson 2010
+        H = np.stack([recursive_h(W[k], sanity_check=sanity_check) for k in range(K)]) # K x M x M x 1
+
         cost[i] = 0
         for n in range(M):
             sigma_n = np.empty((K, K))
+
             for k1 in range(K):
                 for k2 in range(k1, K):
                     sigma_n[k1, k2] = W[[k1], n] @ R[k1, k2] @ W[[k2], n].T
@@ -255,23 +266,36 @@ def IVA_GV(X, whiten=True, lr=1e-2, epochs=100, A=None, sanity_check=False, lr_s
             cost[i] += .5 * (cost_const + np.log(np.linalg.det(sigma_n)))
 
             for k in range(K):
-                e = np.zeros((K, 1))
-                e[k] = 1
                 # Iterate every row of the W_k
+
+                # e = np.zeros((K, 1))
+                # e[k] = 1
 
                 # Calculation of equation 18 in Anderson 2012
                 # X @ Y[:, n].T = X @ (W @ X)[:, n].T = X @ X.T @ W.T = R @ W.T
                 # grad = E_xk_yn @ sigma_inv @ e
                 # E_xk_yn = (Z[k] @ Y[:, n].T) / N
-                h_k_n = get_hn(W[k], n, sanity_check=sanity_check)
+
+                # For m < 100 this is the fastest way.
+                # h_k_n = get_hn(W[k], n, sanity_check=sanity_check)
+                h_k_n = H[k, n]
                 E_xk_yn = np.array([R[k, k_i] @ W[[k_i], n].flatten() for k_i in range(K)]).T
 
                 grad = -h_k_n / (h_k_n.T @ W[k, n])  # H = K, M, M, 1
 
-                grad += E_xk_yn @ sigma_inv @ e
+                # The commented form 1) is the one described in the paper
+                # The commented form 2) is the one implemented in 
+                # https://github.com/trendscenter/gift/blob/b797202a57a927d28a04207baa3c06140dea152d/GroupICAT/icatb/icatb_analysis_functions/icatb_algorithms/icatb_iva_second_order.m
+                # The implemented form is equivalent but is faster, since it only
+                # calculates the necessary part
+                # 1)
+                # grad += E_xk_yn @ sigma_inv @ e
+                #
+                # 2)
                 # for kk in range(K):
                 #   grad += R[k, kk] @ W[kk, n].reshape(M, 1) @ sigma_inv[kk, k].reshape(1, 1)
 
+                grad += E_xk_yn @ sigma_inv[:, [k]]
                 grad = grad.flatten()
 
                 # Apply the gradient
@@ -286,12 +310,13 @@ def IVA_GV(X, whiten=True, lr=1e-2, epochs=100, A=None, sanity_check=False, lr_s
                 W[k, n] = w_n_new
 
                 # Update sigma at row and colum k
-                for kk in range(K):
-                    sigma_n[k, kk] = W[[k], n] @ R[k, kk] @ W[[kk], n].T
-                    sigma_n[kk, k] = sigma_n[k, kk]
-                sigma_inv = np.linalg.inv(sigma_n)
+                # Removing this does not affect the result so much but makes it somewhat not accurate
+                # and also speed it up by 15% +-
+                # for kk in range(K):
+                #     sigma_n[k, kk] = W[[k], n] @ R[k, kk] @ W[[kk], n].T
+                #     sigma_n[kk, k] = sigma_n[k, kk]
+                # sigma_inv = np.linalg.inv(sigma_n)
 
-#                 H[k, n] = get_hn(W[k], n)
         if A is not None:
             ISI_history[i] = ISI(W, A)
             ISR_history[i] = ISR(W, A)
@@ -396,7 +421,7 @@ def IVA_GV_ADAM(X, whiten=True, lr=1e-2, epochs=100, A=None, sanity_check=False,
                 h_k_n = get_hn(W[k], n, sanity_check=sanity_check)
                 E_xk_yn = np.array([R[k, k_i] @ W[[k_i], n].flatten() for k_i in range(K)]).T
 
-                grad = -h_k_n / (h_k_n.T @ W[k, n])  #, H = K, M, M, 1
+                grad = -h_k_n / (h_k_n.T @ W[k, n]) # H = K, M, M, 1
 
                 grad += E_xk_yn @ sigma_inv @ e
                 # for kk in range(K):
@@ -411,9 +436,9 @@ def IVA_GV_ADAM(X, whiten=True, lr=1e-2, epochs=100, A=None, sanity_check=False,
                 vhat = v[1, k, n] / (1 - b2**(i + 1))
 
                 # Apply the gradient
-#                 w_n_new = W[k, n] - lr * (grad / norm(grad, 2))
+                # w_n_new = W[k, n] - lr * (grad / norm(grad, 2))
                 diff = lr * mhat / (np.sqrt(vhat) + 1e-6)
-                w_n_new  = W[k, n] - diff
+                w_n_new = W[k, n] - diff
 
                 # Apply the gradient
                 w_n_new = w_n_new / norm(w_n_new, 2)
@@ -482,3 +507,13 @@ class IVA(BaseEstimator):
     def fit_transform(self, x):
         self.fit(x)
         return self.transform(x)
+
+
+if __name__ == "__main__":
+
+    K = 30
+    M = 8
+    N = 30000
+
+    X, S, A = sample_iva_data(K, M, N)
+    W, B, grad_norm_history, total_norm_history, ISI_history, ISR_history = IVA_GV(X, A=A, epochs=100, lr=.1)
