@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from .base import LightiningEEGModule
+from .base import LightningEEGModule
 from .utils import PoolParams, cast_or_default
 from torch import nn
 from .layers import Square, Log
@@ -7,7 +7,7 @@ from .normalization import apply_max_norm
 import torch
 
 
-class ShallowConvNet(LightiningEEGModule):
+class ShallowConvNet(LightningEEGModule):
 
     DEFAULT_AVG_POOL = PoolParams((1, 75), (1, 15))
 
@@ -31,6 +31,9 @@ class ShallowConvNet(LightiningEEGModule):
         super(ShallowConvNet, self).__init__()
 
         n_classes = 1 if (n_classes <= 2) else n_classes
+
+        self.n_channels = n_channels
+        self.length = length
         self.temporal_filter_max_norm = temporal_filter_max_norm or 2.
         self.spatial_filter_max_norm = spatial_filter_max_norm or 2.
         self.classifier_max_norm = classifier_max_norm or .5
@@ -53,12 +56,7 @@ class ShallowConvNet(LightiningEEGModule):
         self.pool = nn.AvgPool2d(**avg_pool_params._asdict(), ceil_mode=False)
         self.logn = Log()
 
-        extractor = nn.Sequential(
-            self.conv_block,
-            self.pool
-        )
-        final_size = extractor(torch.empty(1, 1, n_channels, length)).size(3)
-        del extractor
+        final_size = self.get_final_size()
 
         self.classifier = nn.Sequential(
             OrderedDict(
@@ -67,6 +65,18 @@ class ShallowConvNet(LightiningEEGModule):
                 linear=nn.Linear(n_spatial_filters * final_size, n_classes)
             )
         )
+
+    def get_final_size(self):
+        in_training = self.training
+        self.eval()
+        extractor = nn.Sequential(
+            self.conv_block,
+            self.pool
+        )
+        final_size = extractor(torch.empty(1, 1, self.n_channels, self.length)).size(3)
+        if in_training:
+            self.train()
+        return final_size
 
     def apply_constraints(self):
         apply_max_norm(self.conv_block.temporal_filter.weight, dim=3, max_value=self.temporal_filter_max_norm)

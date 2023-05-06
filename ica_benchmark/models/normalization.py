@@ -10,5 +10,4 @@ def apply_max_norm(weights, max_value=1., eps=1e-5, dim=2):
     norms = norm(weights, dim=dim)
     desired = torch.clamp(norms, 0, max_value)
     new_weights = weights * (desired / (eps + norms))
-    with torch.no_grad():
-        weights.copy_(new_weights)
+    weights.copy_(new_weights)

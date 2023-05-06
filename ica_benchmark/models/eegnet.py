@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from .base import LightiningEEGModule
+from .base import LightningEEGModule
 from .normalization import apply_max_norm
 from .layers import SeparableConv2d
 from .init import glorot_weight_zero_bias
@@ -7,7 +7,7 @@ import torch
 from torch import nn
 
 
-class EEGNet(LightiningEEGModule):
+class EEGNet(LightningEEGModule):
 
     def __init__(self, n_channels, n_classes, length, *, f1=4, d=2, f2=None, p=.5):
         super(EEGNet, self).__init__()
@@ -18,6 +18,7 @@ class EEGNet(LightiningEEGModule):
         self.d = d
         self.f2 = f2
         self.p = p
+        self.n_channels = n_channels
         self.length = length
 
         n_classes = 1 if (n_classes <= 2) else n_classes
@@ -57,14 +58,7 @@ class EEGNet(LightiningEEGModule):
             )
         )
 
-        extractor = nn.Sequential(
-            self.first_block_top,
-            self.first_block_bottom,
-            self.second_block,
-            nn.Flatten()
-        )
-        final_size = extractor(torch.empty(1, 1, n_channels, length)).size(1)
-        del extractor
+        final_size = self.get_final_size()
 
         self.classifier = nn.Sequential(
             OrderedDict(
@@ -75,9 +69,24 @@ class EEGNet(LightiningEEGModule):
         )
         glorot_weight_zero_bias(self)
 
+    def get_final_size(self):
+        in_training = self.training
+        self.eval()
+        extractor = nn.Sequential(
+            self.first_block_top,
+            self.first_block_bottom,
+            self.second_block,
+            nn.Flatten()
+        )
+        final_size = extractor(torch.empty(1, 1, self.n_channels, self.length)).size(1)
+        if in_training:
+            self.train()
+        return final_size
+
     def apply_constraints(self, max_filter_norm=1., max_clf_norm=.25):
-        apply_max_norm(self.first_block_top.depthwiseconv2d.weight, dim=2, max_value=max_filter_norm)
-        apply_max_norm(self.classifier.linear.weight, dim=1, max_value=max_clf_norm)
+        with torch.no_grad():
+            apply_max_norm(self.first_block_top.depthwiseconv2d.weight, dim=2, max_value=max_filter_norm)
+            apply_max_norm(self.classifier.linear.weight, dim=1, max_value=max_clf_norm)
 
     def forward(self, x):
         if self.training:

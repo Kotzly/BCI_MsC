@@ -5,13 +5,13 @@ from sklearn.metrics import cohen_kappa_score, balanced_accuracy_score
 from lightning.pytorch import LightningModule
 
 
-class LightiningEEGModule(LightningModule):
+class LightningEEGModule(LightningModule):
 
     def set_trainer(self, trainer):
         self.trainer = trainer
 
     def __init__(self, *args, **kwargs):
-        super(LightiningEEGModule, self).__init__(*args, **kwargs)
+        super(LightningEEGModule, self).__init__(*args, **kwargs)
         self.test_step_outputs = list()
         self.test_step_labels = list()
         self.val_step_outputs = list()

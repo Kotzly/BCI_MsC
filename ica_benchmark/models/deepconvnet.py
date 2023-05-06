@@ -1,12 +1,12 @@
 from collections import OrderedDict
-from .base import LightiningEEGModule
+from .base import LightningEEGModule
 from .utils import PoolParams, cast_or_default
 from torch import nn
 from .normalization import apply_max_norm
 import torch
 
 
-class DeepConvNet(LightiningEEGModule):
+class DeepConvNet(LightningEEGModule):
 
     DEFAULT_MAX_POOL = PoolParams((1, 3), (1, 3))
     DEFAULT_CONV_LENGTH = 10
@@ -33,6 +33,9 @@ class DeepConvNet(LightiningEEGModule):
         # N C, H, W
         super(DeepConvNet, self).__init__()
 
+        self.n_channels = n_channels
+        self.length = length
+
         n_filters = n_filters or (50, 100, 200)
         if not isinstance(n_filters, (tuple, list)):
             raise Exception("'n_filters' must be a tuple or a list")
@@ -51,7 +54,7 @@ class DeepConvNet(LightiningEEGModule):
         self.conv_pool_block_1 = nn.Sequential(
             OrderedDict(
                 temporal_filter=nn.Conv2d(
-                    1, n_temporal_filters, (1, temporal_filters_length), groups=1, padding="valid"
+                    1, n_temporal_filters, (1, temporal_filters_length), groups=1, padding="valid", bias=False
                 ),
                 spatial_filter=nn.Conv2d(
                     n_temporal_filters, n_spatial_filters, (n_channels, 1), stride=1, groups=1, padding="valid", bias=False
@@ -93,15 +96,7 @@ class DeepConvNet(LightiningEEGModule):
             )
         )
 
-        extractor = nn.Sequential(
-            self.conv_pool_block_1,
-            self.conv_pool_block_2,
-            self.conv_pool_block_3,
-            self.conv_pool_block_4,
-        )
-        final_size = extractor(torch.empty(1, 1, n_channels, length)).size(3)
-        del extractor
-
+        final_size = self.get_final_size()
         self.classifier = nn.Sequential(
             OrderedDict(
                 flatten=nn.Flatten(),
@@ -113,6 +108,20 @@ class DeepConvNet(LightiningEEGModule):
         self.dropout_2 = nn.Dropout(p=p)
         self.dropout_3 = nn.Dropout(p=p)
         self.dropout_4 = nn.Dropout(p=p)
+
+    def get_final_size(self):
+        in_training = self.training
+        self.eval()
+        extractor = nn.Sequential(
+            self.conv_pool_block_1,
+            self.conv_pool_block_2,
+            self.conv_pool_block_3,
+            self.conv_pool_block_4,
+        )
+        final_size = extractor(torch.empty(1, 1, self.n_channels, self.length)).size(3)
+        if in_training:
+            self.train()
+        return final_size
 
     def apply_constraints(self):
         apply_max_norm(self.conv_pool_block_1.temporal_filter.weight, dim=3, max_value=2.)
