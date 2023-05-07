@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import torch
 import pandas as pd
 import matplotlib.pyplot as plt
+from lightning.pytorch import seed_everything
 
 
 def process_raw_fn(data):
@@ -55,113 +56,115 @@ load_kwargs = dict(
 )
 
 for uid_number in range(1, 10):
+    for trial_number in range(10):
+        seed_everything(trial_number)
 
-    uid = str(uid_number)
+        uid = str(uid_number)
 
-    train_epochs, train_labels = dataset.load_subject(uid, run=1, session=1, **load_kwargs)
-    test_epochs, test_labels = dataset.load_subject(uid, run=1, session=2, **load_kwargs)
+        train_epochs, train_labels = dataset.load_subject(uid, run=1, session=1, **load_kwargs)
+        test_epochs, test_labels = dataset.load_subject(uid, run=1, session=2, **load_kwargs)
 
-    train_epochs.load_data()
-    test_epochs.load_data()
+        train_epochs.load_data()
+        test_epochs.load_data()
 
-    train_data = train_epochs.get_data()
-    test_data = test_epochs.get_data()
+        train_data = train_epochs.get_data()
+        test_data = test_epochs.get_data()
 
-    N = len(train_data)
-    n_train = (3 * N) // 5
-    print(n_train)
+        N = len(train_data)
+        n_train = (3 * N) // 5
+        print(n_train)
 
-    val_data = train_data[-n_train:]
-    val_labels = train_labels[-n_train:]
-    train_data = train_data[:n_train]
-    train_labels = train_labels[:n_train]
+        val_data = train_data[-n_train:]
+        val_labels = train_labels[-n_train:]
+        train_data = train_data[:n_train]
+        train_labels = train_labels[:n_train]
 
-    length = 256
-    train_data = train_data[:, :, :length]
-    val_data = val_data[:, :, :length]
-    test_data = test_data[:, :, :length]
+        length = 256
+        train_data = train_data[:, :, :length]
+        val_data = val_data[:, :, :length]
+        test_data = test_data[:, :, :length]
 
-    train_data, train_labels, val_data, val_labels, test_data, test_labels = to_tensor(
-        train_data, train_labels,
-        val_data, val_labels,
-        test_data, test_labels,
-        device=device
-    )
+        train_data, train_labels, val_data, val_labels, test_data, test_labels = to_tensor(
+            train_data, train_labels,
+            val_data, val_labels,
+            test_data, test_labels,
+            device=device
+        )
 
-    train_dataloader = DataLoader(
-        TensorDataset(
-            train_data.float(),
-            train_labels.long().flatten()
-        ),
-        batch_size=32
-    )
-    val_dataloader = DataLoader(
-        TensorDataset(
-            val_data.float(),
-            val_labels.long().flatten()
-        ),
-        batch_size=len(val_data)
-    )
-    test_dataloader = DataLoader(
-        TensorDataset(
-            test_data.float(),
-            test_labels.long().flatten()
-        ),
-        batch_size=len(test_data)
-    )
-
-    torch.autograd.set_detect_anomaly(True)
-
-    model = EEGNet(n_channels, 4, length, f1=f1, d=d, f2=f2).to(device).float()
-    trainer = pl.Trainer(
-        default_root_dir="./training",
-        callbacks=[
-            ModelCheckpoint(
-                monitor="val_loss",
-                mode="min",
-                every_n_epochs=5,
+        train_dataloader = DataLoader(
+            TensorDataset(
+                train_data.float(),
+                train_labels.long().flatten()
             ),
-            EarlyStopping(
-                monitor="val_loss",
-                min_delta=1e-3,
-                patience=100,
-                verbose=False,
-                mode="min"
-            )
-        ],
-        deterministic=True,
-        check_val_every_n_epoch=5,
-        accelerator="cpu",
-        logger=pl.loggers.CSVLogger(
-            "./logs",
-            name="baseline_eegnet",
-            version=f"subject_{uid}"
-        ),
-        max_epochs=10000
-    )
+            batch_size=32
+        )
+        val_dataloader = DataLoader(
+            TensorDataset(
+                val_data.float(),
+                val_labels.long().flatten()
+            ),
+            batch_size=len(val_data)
+        )
+        test_dataloader = DataLoader(
+            TensorDataset(
+                test_data.float(),
+                test_labels.long().flatten()
+            ),
+            batch_size=len(test_data)
+        )
 
-    model.set_trainer(trainer)
-    model.fit(train_dataloader, val_dataloader)
+        torch.autograd.set_detect_anomaly(True)
 
-    model.test(test_dataloader)
+        model = EEGNet(n_channels, 4, length, f1=f1, d=d, f2=f2).to(device).float()
+        trainer = pl.Trainer(
+            default_root_dir="./training",
+            callbacks=[
+                ModelCheckpoint(
+                    monitor="val_loss",
+                    mode="min",
+                    every_n_epochs=5,
+                ),
+                EarlyStopping(
+                    monitor="val_loss",
+                    min_delta=1e-3,
+                    patience=100,
+                    verbose=False,
+                    mode="min"
+                )
+            ],
+            deterministic=True,
+            check_val_every_n_epoch=5,
+            accelerator="cpu",
+            logger=pl.loggers.CSVLogger(
+                "./logs",
+                name=f"subject_{uid}",
+                version=f"trial_{trial_number}"
+            ),
+            max_epochs=10000
+        )
 
-    train_df = pd.read_csv(f"./logs/baseline_eegnet/subject_{uid}/metrics.csv").dropna(subset=["train_cohen_kappa_score"])
-    val_df = pd.read_csv(f"./logs/baseline_eegnet/subject_{uid}/metrics.csv").dropna(subset=["val_cohen_kappa_score"])
-    metrics = [
-        "cohen_kappa_score",
-        "loss"
-    ]
+        model.set_trainer(trainer)
+        model.fit(train_dataloader, val_dataloader)
 
-    for metric in metrics:
+        model.test(test_dataloader)
 
-        x_train = train_df.epoch
-        y_train = train_df[f"train_{metric}"]
+        train_df = pd.read_csv(f"./logs/subject_{uid}/trial_{trial_number}/metrics.csv").dropna(subset=["train_cohen_kappa_score"])
+        val_df = pd.read_csv(f"./logs/subject_{uid}/trial_{trial_number}/metrics.csv").dropna(subset=["val_cohen_kappa_score"])
+        metrics = [
+            "cohen_kappa_score",
+            "loss"
+        ]
 
-        x_val = val_df.epoch
-        y_val = val_df[f"val_{metric}"]
+        for metric in metrics:
 
-        plt.plot(x_train, y_train, label="Train")
-        plt.plot(x_val, y_val, label="Validation")
-        plt.legend()
-        plt.title(metric)
-        plt.savefig("{metric}.png")
+            x_train = train_df.epoch
+            y_train = train_df[f"train_{metric}"]
+
+            x_val = val_df.epoch
+            y_val = val_df[f"val_{metric}"]
+
+            plt.plot(x_train, y_train, label="Train")
+            plt.plot(x_val, y_val, label="Validation")
+            plt.legend()
+            plt.title(metric)
+            plt.savefig("{metric}.png")
