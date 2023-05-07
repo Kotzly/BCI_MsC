@@ -57,40 +57,41 @@ load_kwargs = dict(
 results_list = list()
 
 for uid_number in range(1, 10):
+
+    uid = str(uid_number)
+
+    train_epochs, train_labels = dataset.load_subject(uid, run=1, session=1, **load_kwargs)
+    test_epochs, test_labels = dataset.load_subject(uid, run=1, session=2, **load_kwargs)
+
+    train_epochs.load_data()
+    test_epochs.load_data()
+
+    train_data = train_epochs.get_data()
+    test_data = test_epochs.get_data()
+
+    N = len(train_data)
+    n_train = (3 * N) // 5
+    print(n_train)
+
+    val_data = train_data[-n_train:]
+    val_labels = train_labels[-n_train:]
+    train_data = train_data[:n_train]
+    train_labels = train_labels[:n_train]
+
+    length = 256
+    train_data = train_data[:, :, :length]
+    val_data = val_data[:, :, :length]
+    test_data = test_data[:, :, :length]
+
+    train_data, train_labels, val_data, val_labels, test_data, test_labels = to_tensor(
+        train_data, train_labels,
+        val_data, val_labels,
+        test_data, test_labels,
+        device=device
+    )
+
     for trial_number in range(10):
         seed_everything(trial_number)
-
-        uid = str(uid_number)
-
-        train_epochs, train_labels = dataset.load_subject(uid, run=1, session=1, **load_kwargs)
-        test_epochs, test_labels = dataset.load_subject(uid, run=1, session=2, **load_kwargs)
-
-        train_epochs.load_data()
-        test_epochs.load_data()
-
-        train_data = train_epochs.get_data()
-        test_data = test_epochs.get_data()
-
-        N = len(train_data)
-        n_train = (3 * N) // 5
-        print(n_train)
-
-        val_data = train_data[-n_train:]
-        val_labels = train_labels[-n_train:]
-        train_data = train_data[:n_train]
-        train_labels = train_labels[:n_train]
-
-        length = 256
-        train_data = train_data[:, :, :length]
-        val_data = val_data[:, :, :length]
-        test_data = test_data[:, :, :length]
-
-        train_data, train_labels, val_data, val_labels, test_data, test_labels = to_tensor(
-            train_data, train_labels,
-            val_data, val_labels,
-            test_data, test_labels,
-            device=device
-        )
 
         train_dataloader = DataLoader(
             TensorDataset(
@@ -127,6 +128,7 @@ for uid_number in range(1, 10):
                     monitor="val_loss",
                     mode="min",
                     every_n_epochs=1,
+                    save_top_k=1
                 ),
                 EarlyStopping(
                     monitor="val_loss",
