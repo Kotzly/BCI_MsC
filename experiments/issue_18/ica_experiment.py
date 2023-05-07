@@ -12,11 +12,14 @@ from lightning.pytorch import seed_everything
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
+from ica_benchmark.processing.ica import get_ica_instance
+from mne import concatenate_epochs
 
 
 def process_raw_fn(data):
     # https://arxiv.org/pdf/1703.05051.pdf
     # First the bandpass, them the exp stand
+
     data = bandpass_cnt(data, low_cut_hz=4., high_cut_hz=38., fs=128., filtfilt=False)
     data = exponential_standardize(data)
 
@@ -30,8 +33,8 @@ def raw_fn(raw):
     )
 
 
-bci_dataset_folderpath = Path('/home/nadalin/Documents/datasets/BCI_Comp_IV_2a/gdf/')
-bci_test_dataset_folderpath = Path('/home/nadalin/Documents/datasets/BCI_Comp_IV_2a/true_labels/')
+bci_dataset_folderpath = Path('/home/paulo/Documents/datasets/BCI_Comp_IV_2a/gdf/')
+bci_test_dataset_folderpath = Path('/home/paulo/Documents/datasets/BCI_Comp_IV_2a/true_labels/')
 
 dataset = BCI_IV_Comp_Dataset(bci_dataset_folderpath, test_folder=bci_test_dataset_folderpath)
 device = "cpu"
@@ -49,25 +52,35 @@ results_list = list()
 
 for uid in dataset.list_uids():
 
-    train_epochs, train_labels_np = dataset.load_subject(uid, run=1, session=1, **load_kwargs)
-    test_epochs, test_labels_np = dataset.load_subject(uid, run=1, session=2, **load_kwargs)
+    train_epochs_orig, _ = dataset.load_subject(uid, run=1, session=1, **load_kwargs)
+    test_epochs_orig, _ = dataset.load_subject(uid, run=1, session=2, **load_kwargs)
 
-    train_data_np = train_epochs.load_data().resample(128).get_data()
-    test_data_np = test_epochs.load_data().resample(128).get_data()
+    train_epochs_orig.load_data().resample(128)
+    test_epochs_orig.load_data().resample(128)
 
     length = 256
 
     for trial_number in range(10):
+
         seed_everything(trial_number)
 
-        train_data, val_data, train_labels, val_labels = train_test_split(
-            train_data_np, train_labels_np,
-            test_size=.3,
-            stratify=train_labels_np,
-            random_state=trial_number
-        )
-        test_data = test_data_np.copy()
-        test_labels = test_labels_np.copy()
+        train_epochs = train_epochs_orig.copy()
+        test_epochs = test_epochs_orig.copy()
+
+        # train_test_split melts epochs, so we need to concatenate them again
+        train_epochs_list, val_epochs_list = train_test_split(train_epochs, random_state=trial_number, stratify=train_epochs.events[:, 2])
+        train_epochs = concatenate_epochs(train_epochs_list)
+        val_epochs = concatenate_epochs(val_epochs_list)
+
+        ICA = get_ica_instance("fastica", random_state=trial_number)
+        ICA.fit(train_epochs)
+        train_epochs = ICA.transform(train_epochs)
+        val_epochs = ICA.transform(val_epochs)
+        test_epochs = ICA.transform(test_epochs)
+
+        train_data, train_labels = train_epochs.get_data(), train_epochs.events[:, 2]
+        val_data, val_labels = val_epochs.get_data(), val_epochs.events[:, 2]
+        test_data, test_labels = test_epochs.get_data(), test_epochs.events[:, 2]
 
         train_data = train_data[:, :, :length]
         val_data = val_data[:, :, :length]
@@ -129,11 +142,11 @@ for uid in dataset.list_uids():
             check_val_every_n_epoch=check_val_every_n_epoch,
             accelerator="cpu",
             logger=pl.loggers.CSVLogger(
-                "./logs",
+                "./logs_ica",
                 name=f"subject_{uid}",
                 version=f"trial_{trial_number}"
             ),
-            max_epochs=10000
+            max_epochs=100
         )
 
         model.set_trainer(trainer)
@@ -146,6 +159,7 @@ for uid in dataset.list_uids():
                 trial=trial_number
             )
         )
-        results_list.append(result)
+        results_list.extend(result)
 
-        pd.DataFrame(results_list).to_csv("results.csv", index=False)
+        # Create a dataframe from results_list, a list of dicts
+        pd.DataFrame(results_list).to_csv("results_ica.csv", index=False)
