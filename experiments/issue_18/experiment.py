@@ -98,21 +98,24 @@ for uid_number in range(1, 10):
                 train_data.float(),
                 train_labels.long().flatten()
             ),
-            batch_size=32
+            batch_size=32,
+            shuffle=True
         )
         val_dataloader = DataLoader(
             TensorDataset(
                 val_data.float(),
                 val_labels.long().flatten()
             ),
-            batch_size=len(val_data)
+            batch_size=len(val_data),
+            shuffle=False
         )
         test_dataloader = DataLoader(
             TensorDataset(
                 test_data.float(),
                 test_labels.long().flatten()
             ),
-            batch_size=len(test_data)
+            batch_size=len(test_data),
+            shuffle=False
         )
 
         torch.autograd.set_detect_anomaly(True)
