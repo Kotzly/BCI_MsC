@@ -127,7 +127,6 @@ for uid_number in range(1, 10):
                 ModelCheckpoint(
                     monitor="val_loss",
                     mode="min",
-                    every_n_epochs=1,
                     save_top_k=1
                 ),
                 EarlyStopping(
