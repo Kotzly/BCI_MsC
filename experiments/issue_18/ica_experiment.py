@@ -146,7 +146,7 @@ for uid in dataset.list_uids():
                 name=f"subject_{uid}",
                 version=f"trial_{trial_number}"
             ),
-            max_epochs=100
+            max_epochs=10000
         )
 
         model.set_trainer(trainer)
