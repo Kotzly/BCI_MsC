@@ -148,7 +148,7 @@ for uid_number in range(1, 10):
         model.set_trainer(trainer)
         model.fit(train_dataloader, val_dataloader)
 
-        result = model.test(test_dataloader, checkpoint="best")
+        result = model.test(test_dataloader, ckpt_path="best")
         result[0].update(
             dict(
                 uid=uid,
