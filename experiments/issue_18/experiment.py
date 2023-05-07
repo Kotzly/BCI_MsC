@@ -167,4 +167,4 @@ for uid_number in range(1, 10):
             plt.plot(x_val, y_val, label="Validation")
             plt.legend()
             plt.title(metric)
-            plt.savefig("{metric}.png")
+            plt.savefig(f"{metric}.png")
