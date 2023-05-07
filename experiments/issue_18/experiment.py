@@ -9,7 +9,6 @@ from ica_benchmark.processing.standardization import exponential_standardize
 from torch.utils.data import DataLoader, TensorDataset
 import torch
 import pandas as pd
-import matplotlib.pyplot as plt
 from lightning.pytorch import seed_everything
 
 
@@ -159,26 +158,5 @@ for uid_number in range(1, 10):
             )
         )
         results_list.append(result)
-
-        train_df = pd.read_csv(f"./logs/subject_{uid}/trial_{trial_number}/metrics.csv").dropna(subset=["train_cohen_kappa_score"])
-        val_df = pd.read_csv(f"./logs/subject_{uid}/trial_{trial_number}/metrics.csv").dropna(subset=["val_cohen_kappa_score"])
-        metrics = [
-            "cohen_kappa_score",
-            "loss"
-        ]
-
-        for metric in metrics:
-
-            x_train = train_df.epoch
-            y_train = train_df[f"train_{metric}"]
-
-            x_val = val_df.epoch
-            y_val = val_df[f"val_{metric}"]
-
-            plt.plot(x_train, y_train, label="Train")
-            plt.plot(x_val, y_val, label="Validation")
-            plt.legend()
-            plt.title(metric)
-            plt.savefig(f"{metric}.png")
 
 pd.DataFrame.from_record(results_list).to_csv("result.csv")
