@@ -1,3 +1,6 @@
+import torch
+
+
 def is_notebook() -> bool:
     try:
         shell = get_ipython().__class__.__name__
@@ -11,11 +14,22 @@ def is_notebook() -> bool:
         return False      # Probably standard Python interpreter
 
 
+def to_tensor(*args, device="cpu"):
+    return (
+        torch.unsqueeze(
+            torch.from_numpy(arg).to(device),
+            1
+        )
+        for arg
+        in args
+    )
+
+
 # https://github.com/TNTLFreiburg/braindecode/blob/d9feb5c6cfcd203fa8daa79ccd3217712714f330/braindecode/mne_ext/signalproc.py#L75
 def apply_raw(func, raw, verbose="WARNING"):
     """
     Apply function to data of `mne.io.RawArray`.
-    
+
     Parameters
     ----------
     func: function
