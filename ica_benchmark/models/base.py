@@ -66,7 +66,6 @@ class LightningEEGModule(LightningModule):
         self.train_step_outputs.append(output)
         self.train_step_labels.append(batch_y)
         return metric_dict
-#     def on_train_epoch_end(self)
 
     def validation_step(self, batch, batch_idx):
         batch_x, batch_y = batch
@@ -91,7 +90,7 @@ class LightningEEGModule(LightningModule):
             torch.cat(self.train_step_outputs),
             torch.cat(self.train_step_labels)
         )
-        self.log_dict(metric_dict)
+        self.log_dict(metric_dict, prog_bar=True)
 
         self.train_step_outputs.clear()
         self.train_step_labels.clear()
@@ -107,7 +106,7 @@ class LightningEEGModule(LightningModule):
             torch.cat(self.val_step_outputs),
             torch.cat(self.val_step_labels)
         )
-        self.log_dict(metric_dict)
+        self.log_dict(metric_dict, prog_bar=True)
 
         self.val_step_outputs.clear()
         self.val_step_labels.clear()

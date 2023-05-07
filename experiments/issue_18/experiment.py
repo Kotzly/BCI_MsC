@@ -1,15 +1,17 @@
-from ica_benchmark.io.load import BCI_IV_Comp_Dataset
 from pathlib import Path
-from ica_benchmark.models import EEGNet
+
 import lightning.pytorch as pl
-from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
+import pandas as pd
+import torch
 from ica_benchmark.data.utils import apply_raw
+from ica_benchmark.io.load import BCI_IV_Comp_Dataset
+from ica_benchmark.models import EEGNet
 from ica_benchmark.processing.filter import bandpass_cnt
 from ica_benchmark.processing.standardization import exponential_standardize
-from torch.utils.data import DataLoader, TensorDataset
-import torch
-import pandas as pd
 from lightning.pytorch import seed_everything
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, TensorDataset
 
 
 def process_raw_fn(data):
@@ -24,7 +26,7 @@ def process_raw_fn(data):
 def raw_fn(raw):
     return apply_raw(
         process_raw_fn,
-        raw.copy().resample(128)
+        raw.copy()
     )
 
 
@@ -56,12 +58,15 @@ load_kwargs = dict(
 
 results_list = list()
 
-for uid_number in range(1, 10):
+for uid_number in dataset.uids():
 
     uid = str(uid_number)
 
     train_epochs, train_labels = dataset.load_subject(uid, run=1, session=1, **load_kwargs)
     test_epochs, test_labels = dataset.load_subject(uid, run=1, session=2, **load_kwargs)
+
+    train_epochs.resample(128)
+    test_epochs.resample(128)
 
     train_epochs.load_data()
     test_epochs.load_data()
@@ -69,29 +74,28 @@ for uid_number in range(1, 10):
     train_data = train_epochs.get_data()
     test_data = test_epochs.get_data()
 
-    N = len(train_data)
-    n_train = (3 * N) // 5
-    print(n_train)
-
-    val_data = train_data[-n_train:]
-    val_labels = train_labels[-n_train:]
-    train_data = train_data[:n_train]
-    train_labels = train_labels[:n_train]
-
     length = 256
-    train_data = train_data[:, :, :length]
-    val_data = val_data[:, :, :length]
-    test_data = test_data[:, :, :length]
-
-    train_data, train_labels, val_data, val_labels, test_data, test_labels = to_tensor(
-        train_data, train_labels,
-        val_data, val_labels,
-        test_data, test_labels,
-        device=device
-    )
 
     for trial_number in range(10):
         seed_everything(trial_number)
+
+        train_data, val_data, train_labels, val_labels = train_test_split(
+            train_data, train_labels,
+            test_size=.3,
+            stratify=train_labels,
+            random_state=trial_number
+        )
+
+        train_data = train_data[..., :length]
+        val_data = val_data[..., :length]
+        test_data = test_data[..., :length]
+
+        train_data, train_labels, val_data, val_labels, test_data, test_labels = to_tensor(
+            train_data, train_labels,
+            val_data, val_labels,
+            test_data, test_labels,
+            device=device
+        )
 
         train_dataloader = DataLoader(
             TensorDataset(
@@ -160,4 +164,4 @@ for uid_number in range(1, 10):
         )
         results_list.append(result)
 
-pd.DataFrame.from_record(results_list).to_csv("result.csv")
+pd.DataFrame.from_records(results_list).to_csv("result.csv")
