@@ -55,6 +55,8 @@ load_kwargs = dict(
     tmin=.5, tmax=2.6, reject=False, raw_fn=raw_fn
 )
 
+results_list = list()
+
 for uid_number in range(1, 10):
     for trial_number in range(10):
         seed_everything(trial_number)
@@ -122,7 +124,7 @@ for uid_number in range(1, 10):
                 ModelCheckpoint(
                     monitor="val_loss",
                     mode="min",
-                    every_n_epochs=5,
+                    every_n_epochs=1,
                 ),
                 EarlyStopping(
                     monitor="val_loss",
@@ -146,7 +148,14 @@ for uid_number in range(1, 10):
         model.set_trainer(trainer)
         model.fit(train_dataloader, val_dataloader)
 
-        model.test(test_dataloader)
+        result = model.test(test_dataloader, checkpoint="best")
+        result[0].update(
+            dict(
+                uid=uid,
+                trial=trial_number
+            )
+        )
+        results_list.append(result)
 
         train_df = pd.read_csv(f"./logs/subject_{uid}/trial_{trial_number}/metrics.csv").dropna(subset=["train_cohen_kappa_score"])
         val_df = pd.read_csv(f"./logs/subject_{uid}/trial_{trial_number}/metrics.csv").dropna(subset=["val_cohen_kappa_score"])
@@ -168,3 +177,5 @@ for uid_number in range(1, 10):
             plt.legend()
             plt.title(metric)
             plt.savefig(f"{metric}.png")
+
+pd.DataFrame.from_record(results_list).to_csv("result.csv")
