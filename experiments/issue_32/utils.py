@@ -71,14 +71,16 @@ class PSD(BaseEstimator):
         return self.kwargs
 
     def fit(self, x, y=None):
-        self.feature_names = [f"{channel}_{band}" for channel in self.channels for band in self.BANDS_DICT]
+        self.feature_names = [
+            f"{channel}_{band}" for channel in self.channels for band in self.BANDS_DICT
+        ]
         return self
 
     def transform(self, x, y=None):
         if isinstance(x, list):
             x = mne.concatenate_epochs(x)
             psds, freqs = psd_welch(x, **self.kwargs)
-        if isinstance(x, mne.Epochs):
+        if isinstance(x, mne.BaseEpochs):
             psds, freqs = psd_welch(x, **self.kwargs)
         if isinstance(x, np.ndarray):
             psds, freqs = psd_array_welch(x, **self.kwargs)
@@ -93,8 +95,7 @@ class PSD(BaseEstimator):
 
         band_spectras = np.concatenate(band_spectras, axis=2)
         features = pd.DataFrame(
-            band_spectras.reshape(len(band_spectras), -1),
-            columns=self.feature_names
+            band_spectras.reshape(len(band_spectras), -1), columns=self.feature_names
         )
 
         return features
