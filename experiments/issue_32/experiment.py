@@ -1,30 +1,30 @@
-import numpy as np
-from pathlib import Path
-import time
 import os
+import pickle
+import random
+import time
+from itertools import cycle
+from pathlib import Path
 
-from sklearn.metrics import balanced_accuracy_score, cohen_kappa_score, accuracy_score
+import numpy as np
+import pandas as pd
+from colorama import Fore, Style
+from mne import Epochs
+from sklearn.feature_selection import SequentialFeatureSelector
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    cohen_kappa_score,
+    make_scorer,
+)
+from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from utils import PSD, alg_rename, get_classifier, load_subject_epochs
+
+from ica_benchmark.io.load import BCI_IV_Comp_Dataset
 from ica_benchmark.processing.ica import get_ica_instance
 from ica_benchmark.processing.orica_code import ORICA
-from ica_benchmark.io.load import BCI_IV_Comp_Dataset
-
-import pandas as pd
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GridSearchCV
-from mne import Epochs
-
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import make_scorer
-from sklearn.feature_selection import SequentialFeatureSelector
-import random
-
-from utils import get_classifier, load_subject_epochs, PSD, ConcatenateChannelsPSD
-from utils import alg_rename
-
-from colorama import Fore, Style
-from itertools import cycle
-import pickle
 
 COLORS = [
     Fore.BLUE,
@@ -107,7 +107,6 @@ def get_PSD(data, channels, sfreq=250, len_size=250):
 
 
 def save_artifact(artifact, name, save_folder, uid, ica_method, clf_method, n_run):
-
     save_folder = save_folder / f"{uid}"
 
     for subfolder in (ica_method, clf_method):
@@ -117,7 +116,7 @@ def save_artifact(artifact, name, save_folder, uid, ica_method, clf_method, n_ru
     save_folder.mkdir(parents=True, exist_ok=True)
 
     artifact_path = save_folder / f"{name}_{n_run}.pkl"
-    
+
     with open(artifact_path, "wb") as f:
         pickle.dump(artifact, f)
 
@@ -216,7 +215,9 @@ def run(
                         .reshape(n_channels, n_epochs, n_times)
                         .transpose(1, 0, 2)
                     )
-                    save_artifact(ICA, "ica_end", save_folder, uid, ica_method, None, n_run)
+                    save_artifact(
+                        ICA, "ica_end", save_folder, uid, ica_method, None, n_run
+                    )
 
                 else:
                     ICA = get_ica_instance(ica_method, random_state=run_seed)
@@ -226,7 +227,10 @@ def run(
                     save_artifact(ICA, "ica", save_folder, uid, ica_method, None, n_run)
 
                 psd = get_PSD(
-                    x_train, channels=train_epochs.ch_names, sfreq=train_epochs.info["sfreq"], len_size=len_size
+                    x_train,
+                    channels=train_epochs.ch_names,
+                    sfreq=train_epochs.info["sfreq"],
+                    len_size=len_size,
                 )
 
                 # Feature extraction
@@ -267,7 +271,6 @@ def run(
                 pp_end = time.time()
 
             for clf_method in clf_methods:
-
                 if not is_stochastic(ica_method, clf_method) and n_run > 0:
                     # Save time
                     continue
@@ -341,9 +344,7 @@ def run(
                         n_selected_features,
                     )
                 )
-                print(
-                    "\tKappa", "{:.3f}".format(cohen_kappa_score(y_test, pred))
-                )
+                print("\tKappa", "{:.3f}".format(cohen_kappa_score(y_test, pred)))
 
     columns = [
         "run",
@@ -355,14 +356,13 @@ def run(
         "kappa",
         "clf_fit_time",
         "preprocess_fit_time",
-        "selected_features"
+        "selected_features",
     ]
     results_df = pd.DataFrame(results, columns=columns)
     return results_df
 
 
 if __name__ == "__main__":
-
     bci_dataset_folderpath = Path("/home/paulo/Documents/datasets/BCI_Comp_IV_2a/gdf/")
     bci_test_dataset_folderpath = Path(
         "/home/paulo/Documents/datasets/BCI_Comp_IV_2a/true_labels/"
@@ -372,7 +372,7 @@ if __name__ == "__main__":
     )
 
     clf_methods = [
-        #"mlp",
+        "mlp",
         "random_forest",
         "extra_trees",
         "gaussian_nb",
@@ -386,12 +386,12 @@ if __name__ == "__main__":
         "logistic",
     ]
 
-    N_RUNS = 2
+    N_RUNS = 10
 
     ica_methods = [
         "none",
         "orica 0",
-        #"orica 1",
+        "orica 1",
         "ext_infomax",
         "infomax",
         "sobi",
@@ -399,19 +399,19 @@ if __name__ == "__main__":
         "picard",
         "fastica",
         "picard_o",
-        #"whitening",
-        #"pca",
+        # "whitening",
+        # "pca",
     ]
 
     deterministic_results = dict()
     save_folder = Path("results")
-    for uid in dataset.list_uids()[:1]:
+    for uid in dataset.list_uids():
         subject_results_dict = run(
             dataset,
             uid,
             save_folder,
-            ica_methods=ica_methods[:2],
-            clf_methods=clf_methods[:1],
+            ica_methods=ica_methods,
+            clf_methods=clf_methods,
             n_runs=N_RUNS,
         )
         deterministic_results[uid] = subject_results_dict
@@ -429,4 +429,4 @@ if __name__ == "__main__":
         )
         results_df.algorithm = results_df.algorithm.apply(alg_rename)
 
-        results_df.to_csv("results.csv", index=False)
+        results_df.to_csv(save_folder / "results.csv", index=False)
