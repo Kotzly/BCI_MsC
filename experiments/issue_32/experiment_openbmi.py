@@ -142,6 +142,12 @@ def load_subject_epochs(dataset, uid, load_kwargs):
     train_labels = np.concatenate([train_labels_1, train_labels_2])
     test_labels = np.concatenate([test_labels_1, test_labels_2])
 
+    filter_kwargs = dict(method="iir", iir_params=dict(order=5, ftype="butter"))
+
+    # Filtering
+    train_epochs = train_epochs.filter(8, 30, **filter_kwargs)
+    test_epochs = test_epochs.filter(8, 30, **filter_kwargs)
+
     return (train_epochs, train_labels), (test_epochs, test_labels)
 
 
@@ -424,9 +430,9 @@ if __name__ == "__main__":
 
     deterministic_results = dict()
     save_folder = Path("results_openbmi")
-    results_filepath = save_folder / "results_2.csv"
+    results_filepath = save_folder / "results.csv"
 
-    for uid in list(dataset.list_uids())[::-1]:
+    for uid in list(dataset.list_uids()):
         if (save_folder / uid).exists():
             print(uid, "already exists")
             continue
