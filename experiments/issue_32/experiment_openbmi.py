@@ -19,7 +19,7 @@ from sklearn.metrics import make_scorer
 from sklearn.feature_selection import SequentialFeatureSelector
 import random
 
-from utils import get_classifier, load_subject_epochs, PSD
+from utils import get_classifier, PSD
 from utils import alg_rename
 
 from colorama import Fore, Style
