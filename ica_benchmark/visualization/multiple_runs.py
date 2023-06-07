@@ -424,7 +424,7 @@ if __name__ == "__main__":
             val_col="Kappa",
             grouping_cols="classifier",
             save_filepath=results_folder
-            / f"best_classifer_per_subject_for_{algorithm}.png",
+            / f"best_classifier_per_subject_for_{algorithm}.png",
             x_label="Subject",
         )
         detailed_barplot(
