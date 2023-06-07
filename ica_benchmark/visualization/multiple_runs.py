@@ -367,103 +367,103 @@ if __name__ == "__main__":
     results_folder = args.save_folder
     results_folder.mkdir(exist_ok=True)
 
-    # for classifier in classifiers:
-    #     classifier_df = results_df[results_df.classifier == classifier]
-    #     best_per_group_barplot(
-    #         classifier_df,
-    #         x_col="uid",
-    #         val_col="Kappa",
-    #         grouping_cols="algorithm",
-    #         save_filepath=results_folder
-    #         / f"best_algorithm_per_subject_for_{classifier}.png",
-    #         x_label="Subject",
-    #     )
+    for classifier in classifiers:
+        classifier_df = results_df[results_df.classifier == classifier]
+        best_per_group_barplot(
+            classifier_df,
+            x_col="uid",
+            val_col="Kappa",
+            grouping_cols="algorithm",
+            save_filepath=results_folder
+            / f"best_algorithm_per_subject_for_{classifier}.png",
+            x_label="Subject",
+        )
 
-    #     detailed_barplot(
-    #         classifier_df,
-    #         x_col="uid",
-    #         hue_col="algorithm",
-    #         val_col="Kappa",
-    #         key_cols="run",
-    #         save_filepath=results_folder / f"detailed_{classifier}.png",
-    #         x_label="Subject",
-    #     )
-    #     detailed_barplot(
-    #         classifier_df,
-    #         x_col="algorithm",
-    #         hue_col="uid",
-    #         val_col="Kappa",
-    #         key_cols="run",
-    #         save_filepath=results_folder / f"algorithm_comparison_for_{classifier}.png",
-    #         x_label="Subject",
-    #     )
-    #     average_barplot(
-    #         classifier_df,
-    #         x_col="algorithm",
-    #         grouping_cols="uid",
-    #         val_col="Kappa",
-    #         key_cols="run",
-    #         save_filepath=results_folder
-    #         / f"average_per_algorithm_for_{classifier}.png",
-    #         n_boots=N_BOOT,
-    #     )
-    #     average_barplot(
-    #         classifier_df,
-    #         x_col="uid",
-    #         grouping_cols="algorithm",
-    #         val_col="Kappa",
-    #         key_cols="run",
-    #         save_filepath=results_folder / f"average_per_subject_for_{classifier}.png",
-    #         n_boots=N_BOOT,
-    #     )
-    # for algorithm in algorithms:
-    #     algorithm_df = results_df[results_df.algorithm == algorithm]
-    #     best_per_group_barplot(
-    #         algorithm_df,
-    #         x_col="uid",
-    #         val_col="Kappa",
-    #         grouping_cols="classifier",
-    #         save_filepath=results_folder
-    #         / f"best_classifer_per_subject_for_{algorithm}.png",
-    #         x_label="Subject",
-    #     )
-    #     detailed_barplot(
-    #         algorithm_df,
-    #         x_col="uid",
-    #         hue_col="classifier",
-    #         val_col="Kappa",
-    #         key_cols="run",
-    #         save_filepath=results_folder / f"detailed_{algorithm}.png",
-    #         x_label="Subject",
-    #     )
-    #     detailed_barplot(
-    #         algorithm_df,
-    #         x_col="classifier",
-    #         hue_col="uid",
-    #         val_col="Kappa",
-    #         key_cols="run",
-    #         save_filepath=results_folder / f"classifier_comparison_for_{algorithm}.png",
-    #         x_label="Subject",
-    #     )
-    #     average_barplot(
-    #         algorithm_df,
-    #         x_col="classifier",
-    #         grouping_cols="uid",
-    #         val_col="Kappa",
-    #         key_cols="run",
-    #         save_filepath=results_folder
-    #         / f"average_per_classifier_for_{algorithm}.png",
-    #         n_boots=N_BOOT,
-    #     )
-    #     average_barplot(
-    #         algorithm_df,
-    #         x_col="uid",
-    #         grouping_cols="classifier",
-    #         val_col="Kappa",
-    #         key_cols="run",
-    #         save_filepath=results_folder / f"average_per_subject_for_{algorithm}.png",
-    #         n_boots=N_BOOT,
-    #     )
+        detailed_barplot(
+            classifier_df,
+            x_col="uid",
+            hue_col="algorithm",
+            val_col="Kappa",
+            key_cols="run",
+            save_filepath=results_folder / f"detailed_{classifier}.png",
+            x_label="Subject",
+        )
+        detailed_barplot(
+            classifier_df,
+            x_col="algorithm",
+            hue_col="uid",
+            val_col="Kappa",
+            key_cols="run",
+            save_filepath=results_folder / f"algorithm_comparison_for_{classifier}.png",
+            x_label="Subject",
+        )
+        average_barplot(
+            classifier_df,
+            x_col="algorithm",
+            grouping_cols="uid",
+            val_col="Kappa",
+            key_cols="run",
+            save_filepath=results_folder
+            / f"average_per_algorithm_for_{classifier}.png",
+            n_boots=N_BOOT,
+        )
+        average_barplot(
+            classifier_df,
+            x_col="uid",
+            grouping_cols="algorithm",
+            val_col="Kappa",
+            key_cols="run",
+            save_filepath=results_folder / f"average_per_subject_for_{classifier}.png",
+            n_boots=N_BOOT,
+        )
+    for algorithm in algorithms:
+        algorithm_df = results_df[results_df.algorithm == algorithm]
+        best_per_group_barplot(
+            algorithm_df,
+            x_col="uid",
+            val_col="Kappa",
+            grouping_cols="classifier",
+            save_filepath=results_folder
+            / f"best_classifer_per_subject_for_{algorithm}.png",
+            x_label="Subject",
+        )
+        detailed_barplot(
+            algorithm_df,
+            x_col="uid",
+            hue_col="classifier",
+            val_col="Kappa",
+            key_cols="run",
+            save_filepath=results_folder / f"detailed_{algorithm}.png",
+            x_label="Subject",
+        )
+        detailed_barplot(
+            algorithm_df,
+            x_col="classifier",
+            hue_col="uid",
+            val_col="Kappa",
+            key_cols="run",
+            save_filepath=results_folder / f"classifier_comparison_for_{algorithm}.png",
+            x_label="Subject",
+        )
+        average_barplot(
+            algorithm_df,
+            x_col="classifier",
+            grouping_cols="uid",
+            val_col="Kappa",
+            key_cols="run",
+            save_filepath=results_folder
+            / f"average_per_classifier_for_{algorithm}.png",
+            n_boots=N_BOOT,
+        )
+        average_barplot(
+            algorithm_df,
+            x_col="uid",
+            grouping_cols="classifier",
+            val_col="Kappa",
+            key_cols="run",
+            save_filepath=results_folder / f"average_per_subject_for_{algorithm}.png",
+            n_boots=N_BOOT,
+        )
 
     best_per_group_barplot(
         results_df,
