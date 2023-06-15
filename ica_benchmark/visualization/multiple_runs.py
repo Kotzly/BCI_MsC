@@ -66,7 +66,7 @@ def best_per_group_barplot(
     annotate_bars(ax, bar_labels)
     ax.tick_params(labelrotation=60)
     ax.set_ylim(ylim)
-    ax.set_xlabel(x_label)
+    ax.set_xlabel(x_label, labelpad=10)
     ax.set_title(title, fontsize=12)
 
     fig.tight_layout()
@@ -84,11 +84,14 @@ def detailed_barplot(
     w=5,
     cmap="nipy_spectral",
     x_label=None,
+    y_label=None,
     title=None,
+    ylim=None,
 ):
     x_label = x_label if x_label is not None else x_col
+    y_label = y_label if y_label is not None else val_col
     title = title if title is not None else f"{val_col} per {x_label}, per {hue_col}"
-
+    ylim = ylim if ylim is not None else (0, 1)
     fig = plt.figure(figsize=(20, 6), dpi=120)
     ax = plt.gca()
 
@@ -162,17 +165,19 @@ def detailed_barplot(
             fontsize=15,
             rotation=-60,
         )
-    ax.set_xlabel(x_label, fontsize=20)
 
     for loc in ["right", "left", "top", "bottom"]:
         ax.spines[loc].set_visible(False)
     ax.set_xticks([])
     ax.set_xticklabels(ax.get_xticklabels(), rotation=60, fontsize=12)
-    ax.set_yticks(np.arange(0, 1.01, 0.1))
+    tick_sep = (ylim[1] - ylim[0]) / 10
+    ax.set_yticks(np.arange(ylim[0], ylim[1] + tick_sep / 10, tick_sep))
     ax.grid()
     ax.legend(handles=legends, loc=(1, 0.2), fontsize=15)
-    ax.set_ylabel(val_col, fontsize=20)
+    ax.set_xlabel(x_label, fontsize=20, labelpad=10)
+    ax.set_ylabel(y_label, fontsize=20)
     ax.set_title(title, fontsize=20)
+    ax.set_ylim(ylim)
 
     # Ensure figure doesnt get cropped during save
     fig.tight_layout()
@@ -190,10 +195,13 @@ def average_barplot(
     w=5,
     cmap="nipy_spectral",
     x_label=None,
+    y_label=None,
     n_boots=N_BOOT,
     title=None,
+    label_rotation=90,
 ):
     x_label = x_col if x_label is None else x_label
+    y_label = y_label if y_label is not None else val_col
     key_cols = [key_cols] if isinstance(key_cols, str) else key_cols
     title = title if title is not None else f"Average {val_col} for each {x_col}"
     grouping_cols = [grouping_cols] if isinstance(grouping_cols, str) else grouping_cols
@@ -247,7 +255,7 @@ def average_barplot(
             horizontalalignment="center",
             verticalalignment="top",
             fontsize=15,
-            rotation=90,
+            rotation=label_rotation,
         )
         # ax.text(x_c, -0.05, r"$\bar\rho={:.3f}$".format(avg), horizontalalignment="center", fontsize=15, usetex=True, rotation=60)
         if x != best_x:
@@ -276,8 +284,8 @@ def average_barplot(
                     color="r",
                 )
 
-    ax.set_xlabel(x_label, fontsize=20)
-    ax.set_ylabel(val_col, fontsize=20)
+    ax.set_xlabel(x_label, fontsize=20, labelpad=10)
+    ax.set_ylabel(y_label, fontsize=20)
     ax.grid()
     ax.set_title(title, fontsize=20)
     fig.tight_layout()
@@ -309,7 +317,7 @@ def boxplot_algorithms(results_df, metric="kappa", save_filepath=None):
     for loc in ["right", "left", "top", "bottom"]:
         ax.spines[loc].set_visible(False)
 
-    ax.set_xlabel(ax.xaxis.get_label().get_text(), fontsize=15)
+    ax.set_xlabel(ax.xaxis.get_label().get_text(), fontsize=15, labelpad=10)
     ax.set_ylabel(ax.yaxis.get_label().get_text(), fontsize=15)
 
     fig.tight_layout()
@@ -331,7 +339,7 @@ def boxplot_subjects(results_df, metric="kappa", save_filepath=None):
     for loc in ["right", "left", "top", "bottom"]:
         ax.spines[loc].set_visible(False)
 
-    ax.set_xlabel(ax.xaxis.get_label().get_text(), fontsize=15)
+    ax.set_xlabel(ax.xaxis.get_label().get_text(), fontsize=15, labelpad=10)
     ax.set_ylabel(ax.yaxis.get_label().get_text(), fontsize=15)
 
     if save_filepath is not None:
