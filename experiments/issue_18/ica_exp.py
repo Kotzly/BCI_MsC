@@ -209,7 +209,7 @@ def run(
                     x_train = (
                         ICA.transform(
                             x,
-                            scaling=1e6,
+                            scaling=1,
                             save=False,
                         )
                         .reshape(n_channels, n_epochs, n_times)
@@ -224,7 +224,7 @@ def run(
                     n_epochs, n_channels, n_times = x_val.shape
                     x = x_val.transpose(1, 0, 2).reshape(n_channels, -1)
                     x_val = (
-                        ICA.transform(x, scaling=1e6, save=False, warm_start=True)
+                        ICA.transform(x, scaling=1, save=False, warm_start=True)
                         .reshape(n_channels, n_epochs, n_times)
                         .transpose(1, 0, 2)
                     )
@@ -232,7 +232,7 @@ def run(
                     n_epochs, n_channels, n_times = x_test.shape
                     x = x_test.transpose(1, 0, 2).reshape(n_channels, -1)
                     x_test = (
-                        ICA.transform(x, scaling=1e6, save=False, warm_start=True)
+                        ICA.transform(x, scaling=1, save=False, warm_start=True)
                         .reshape(n_channels, n_epochs, n_times)
                         .transpose(1, 0, 2)
                     )
@@ -252,6 +252,10 @@ def run(
                 x_train, y_train = x_train.get_data(), x_train.events[:, 2]
                 x_val, y_val = x_val.get_data(), x_val.events[:, 2]
                 x_test, y_test = x_test.get_data(), x_test.events[:, 2]
+
+            x_train = x_train[:, :, :length]
+            x_val = x_val[:, :, :length]
+            x_test = x_test[:, :, :length]
 
             (
                 train_data,
@@ -291,9 +295,17 @@ def run(
             model = EEGNet(n_channels, 4, length, f1=f1, d=d, f2=f2).to(device).float()
             check_val_every_n_epoch = 5
             patience = 100
+            checkpoint_dirpath = (
+                save_folder / "checkpoints" / f"{uid}_{ica_method}_{n_run}"
+            )
             trainer = pl.Trainer(
                 callbacks=[
-                    ModelCheckpoint(monitor="val_loss", mode="min", save_top_k=1),
+                    ModelCheckpoint(
+                        dirpath=checkpoint_dirpath,
+                        monitor="val_loss",
+                        mode="min",
+                        save_top_k=1,
+                    ),
                     EarlyStopping(
                         monitor="val_loss",
                         min_delta=1e-3,
