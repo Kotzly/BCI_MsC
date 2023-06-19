@@ -199,6 +199,7 @@ def average_barplot(
     n_boots=N_BOOT,
     title=None,
     label_rotation=90,
+    figsize=(20, 6),
 ):
     x_label = x_col if x_label is None else x_label
     y_label = y_label if y_label is not None else val_col
@@ -206,7 +207,7 @@ def average_barplot(
     title = title if title is not None else f"Average {val_col} for each {x_col}"
     grouping_cols = [grouping_cols] if isinstance(grouping_cols, str) else grouping_cols
 
-    fig = plt.figure(figsize=(20, 6), dpi=120)
+    fig = plt.figure(figsize=figsize, dpi=120)
     ax = plt.gca()
 
     x_c = w / 2
