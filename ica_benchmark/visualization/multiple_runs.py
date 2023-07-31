@@ -87,12 +87,17 @@ def detailed_barplot(
     y_label=None,
     title=None,
     ylim=None,
+    figsize=None,
+    labelpad=10,
+    tick_pad=-0.1,
+    ast_loc=(-0.03, 0.03),
 ):
     x_label = x_label if x_label is not None else x_col
     y_label = y_label if y_label is not None else val_col
     title = title if title is not None else f"{val_col} per {x_label}, per {hue_col}"
     ylim = ylim if ylim is not None else (0, 1)
-    fig = plt.figure(figsize=(20, 6), dpi=120)
+    figsize = figsize if figsize is not None else (16, 6)
+    fig = plt.figure(figsize=figsize, dpi=120)
     ax = plt.gca()
 
     x_c = w / 2
@@ -145,7 +150,7 @@ def detailed_barplot(
                 if pvalue < 0.05:
                     ax.text(
                         x_c,
-                        -0.03 if avg > 0 else 0.03,
+                        ast_loc[0] if avg > 0 else ast_loc[1],
                         "*",
                         ha="center",
                         va="center",
@@ -158,7 +163,7 @@ def detailed_barplot(
         mid = np.mean(x_list)
         ax.text(
             mid,
-            -0.1,
+            tick_pad,
             x,
             horizontalalignment="center",
             verticalalignment="top",
@@ -174,7 +179,7 @@ def detailed_barplot(
     ax.set_yticks(np.arange(ylim[0], ylim[1] + tick_sep / 10, tick_sep))
     ax.grid()
     ax.legend(handles=legends, loc=(1, 0.2), fontsize=15)
-    ax.set_xlabel(x_label, fontsize=20, labelpad=10)
+    ax.set_xlabel(x_label, fontsize=20, labelpad=labelpad)
     ax.set_ylabel(y_label, fontsize=20)
     ax.set_title(title, fontsize=20)
     ax.set_ylim(ylim)
@@ -199,13 +204,23 @@ def average_barplot(
     n_boots=N_BOOT,
     title=None,
     label_rotation=90,
-    figsize=(20, 6),
+    figsize=None,
+    labelpad=10,
+    legend_in=None,
+    ylim=None,
 ):
     x_label = x_col if x_label is None else x_label
     y_label = y_label if y_label is not None else val_col
+    figsize = figsize if figsize is not None else (16, 6)
     key_cols = [key_cols] if isinstance(key_cols, str) else key_cols
     title = title if title is not None else f"Average {val_col} for each {x_col}"
     grouping_cols = [grouping_cols] if isinstance(grouping_cols, str) else grouping_cols
+
+    assert legend_in in (
+        "legend",
+        "xlabel",
+        None,
+    ), "legend_in must be 'legend' or 'xlabel' or None"
 
     fig = plt.figure(figsize=figsize, dpi=120)
     ax = plt.gca()
@@ -247,12 +262,17 @@ def average_barplot(
                 [res.confidence_interval.high - avg],
             ),
             color=hue_color_dict[x],
+            label=(
+                "{}\n$\\bar\\rho={:.3f}$".format(x, avg)
+                if legend_in == "legend"
+                else None
+            ),
         )
         ax.set_xticks([])
         ax.text(
             x_c,
             -0.025,
-            "{}\nrho={:.3f}".format(x, avg),
+            "{}\n$\\bar\\rho={:.3f}$".format(x, avg) if legend_in == "xlabel" else x,
             horizontalalignment="center",
             verticalalignment="top",
             fontsize=15,
@@ -285,10 +305,13 @@ def average_barplot(
                     color="r",
                 )
 
-    ax.set_xlabel(x_label, fontsize=20, labelpad=10)
+    ax.set_xlabel(x_label, fontsize=20, labelpad=labelpad)
     ax.set_ylabel(y_label, fontsize=20)
+    ax.set_ylim(ylim)
     ax.grid()
     ax.set_title(title, fontsize=20)
+    if legend_in == "legend":
+        ax.legend(loc=(1.0, 0.0))
     fig.tight_layout()
 
     if save_filepath is not None:
