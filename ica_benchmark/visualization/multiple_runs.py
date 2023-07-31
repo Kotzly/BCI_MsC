@@ -33,6 +33,7 @@ def best_per_group_barplot(
     save_filepath=None,
     ylim=None,
     title=None,
+    dpi=150,
 ):
     x_label = x_label if x_label is not None else x_col
     ylim = ylim if ylim is not None else (0, 1)
@@ -55,7 +56,7 @@ def best_per_group_barplot(
     )
     label_df = highest_df[merge_cols].sort_values(by=x_col, ascending=True)
 
-    fig = plt.figure(figsize=figsize, dpi=150)
+    fig = plt.figure(figsize=figsize, dpi=dpi)
     ax = plt.gca()
     ax.grid()
     sns.barplot(
@@ -91,13 +92,14 @@ def detailed_barplot(
     labelpad=10,
     tick_pad=-0.1,
     ast_loc=(-0.03, 0.03),
+    dpi=150,
 ):
     x_label = x_label if x_label is not None else x_col
     y_label = y_label if y_label is not None else val_col
     title = title if title is not None else f"{val_col} per {x_label}, per {hue_col}"
     ylim = ylim if ylim is not None else (0, 1)
     figsize = figsize if figsize is not None else (16, 6)
-    fig = plt.figure(figsize=figsize, dpi=120)
+    fig = plt.figure(figsize=figsize, dpi=dpi)
     ax = plt.gca()
 
     x_c = w / 2
@@ -208,6 +210,7 @@ def average_barplot(
     labelpad=10,
     legend_in=None,
     ylim=None,
+    dpi=150,
 ):
     x_label = x_col if x_label is None else x_label
     y_label = y_label if y_label is not None else val_col
@@ -222,7 +225,7 @@ def average_barplot(
         None,
     ), "legend_in must be 'legend' or 'xlabel' or None"
 
-    fig = plt.figure(figsize=figsize, dpi=120)
+    fig = plt.figure(figsize=figsize, dpi=dpi)
     ax = plt.gca()
 
     x_c = w / 2
@@ -318,7 +321,7 @@ def average_barplot(
         fig.savefig(save_filepath)
 
 
-def boxplot_algorithms(results_df, metric="kappa", save_filepath=None):
+def boxplot_algorithms(results_df, metric="kappa", save_filepath=None, dpi=150):
     algorithms = (
         results_df.groupby(["uid", "algorithm"])
         .mean()
@@ -328,7 +331,7 @@ def boxplot_algorithms(results_df, metric="kappa", save_filepath=None):
         .reset_index()
         .algorithm
     )
-    fig = plt.figure(figsize=(12, 6))
+    fig = plt.figure(figsize=(12, 6), dpi=dpi)
     ax = plt.gca()
     sns.boxplot(
         x="Algorithm",
@@ -349,8 +352,8 @@ def boxplot_algorithms(results_df, metric="kappa", save_filepath=None):
         fig.savefig(save_filepath)
 
 
-def boxplot_subjects(results_df, metric="kappa", save_filepath=None):
-    fig = plt.figure(figsize=(12, 6))
+def boxplot_subjects(results_df, metric="kappa", save_filepath=None, dpi=150):
+    fig = plt.figure(figsize=(12, 6), dpi=dpi)
     ax = plt.gca()
     sns.boxplot(
         x="uid",
