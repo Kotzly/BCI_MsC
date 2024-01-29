@@ -8,8 +8,7 @@ from torch import nn
 
 
 class EEGNet(LightningEEGModule):
-
-    def __init__(self, n_channels, n_classes, length, *, f1=4, d=2, f2=None, p=.5):
+    def __init__(self, n_channels, n_classes, length, *, f1=4, d=2, f2=None, p=0.5):
         super(EEGNet, self).__init__()
 
         f2 = f2 or f1 * d
@@ -23,12 +22,14 @@ class EEGNet(LightningEEGModule):
 
         n_classes = 1 if (n_classes <= 2) else n_classes
 
-        depthwiseconv2d = nn.Conv2d(f1, d * f1, (n_channels, 1), groups=f1, padding="valid", bias=False)
+        depthwiseconv2d = nn.Conv2d(
+            f1, d * f1, (n_channels, 1), groups=f1, padding="valid", bias=False
+        )
         self.first_block_top = nn.Sequential(
             OrderedDict(
                 conv2d=nn.Conv2d(1, f1, (1, 64), padding="same", bias=False),
                 batchnorm=nn.BatchNorm2d(f1, 1e-5),
-                depthwiseconv2d=depthwiseconv2d
+                depthwiseconv2d=depthwiseconv2d,
             )
         )
 
@@ -49,7 +50,7 @@ class EEGNet(LightningEEGModule):
                     kernel_size=(1, 16),
                     bias=False,
                     padding="same",
-                    depth_multiplier=1
+                    depth_multiplier=1,
                 ),
                 batchnorm=nn.BatchNorm2d(f2, 1e-5),
                 activation=nn.ELU(),
@@ -60,11 +61,15 @@ class EEGNet(LightningEEGModule):
 
         final_size = self.get_final_size()
 
+        # Usage of torch.nn.CrossEntropyLoss does not need final softmax layer
+        # https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
         self.classifier = nn.Sequential(
             OrderedDict(
                 flatten=nn.Flatten(),
                 # linear=nn.Linear(f2 * length // 32, n_classes),
-                linear=nn.Linear(final_size, n_classes)  # If length is a power of 2, final size will be f2 * length // 32
+                linear=nn.Linear(
+                    final_size, n_classes
+                ),  # If length is a power of 2, final size will be f2 * length // 32
             )
         )
         glorot_weight_zero_bias(self)
@@ -76,16 +81,20 @@ class EEGNet(LightningEEGModule):
             self.first_block_top,
             self.first_block_bottom,
             self.second_block,
-            nn.Flatten()
+            nn.Flatten(),
         )
         final_size = extractor(torch.empty(1, 1, self.n_channels, self.length)).size(1)
         if in_training:
             self.train()
         return final_size
 
-    def apply_constraints(self, max_filter_norm=1., max_clf_norm=.25):
+    def apply_constraints(self, max_filter_norm=1.0, max_clf_norm=0.25):
         with torch.no_grad():
-            apply_max_norm(self.first_block_top.depthwiseconv2d.weight, dim=2, max_value=max_filter_norm)
+            apply_max_norm(
+                self.first_block_top.depthwiseconv2d.weight,
+                dim=2,
+                max_value=max_filter_norm,
+            )
             apply_max_norm(self.classifier.linear.weight, dim=1, max_value=max_clf_norm)
 
     def forward(self, x):
