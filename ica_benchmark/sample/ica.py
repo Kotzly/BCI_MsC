@@ -1,33 +1,5 @@
 import numpy as np
 from scipy.stats import norm
-from scipy.signal import butter, lfilter
-
-
-def butter_bandpass(lowcut, highcut, fs, order=5):
-    nyq = 0.5 * fs
-    low = lowcut / nyq
-    high = highcut / nyq
-    b, a = butter(order, [low, high], btype="band")
-    return b, a
-
-
-def butter_lowpass(cutoff, fs, order=5):
-    nyq = 0.5 * fs
-    normal_cutoff = cutoff / nyq
-    b, a = butter(order, normal_cutoff, btype="low", analog=False)
-    return b, a
-
-
-def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    y = lfilter(b, a, data)
-    return y
-
-
-def butter_lowpass_filter(data, cutoff, fs, order=5):
-    b, a = butter_lowpass(cutoff, fs, order=order)
-    y = lfilter(b, a, data)
-    return y
 
 
 def saw_tooth_wave(N=20000, n_periods=10, seed=42):
@@ -36,18 +8,6 @@ def saw_tooth_wave(N=20000, n_periods=10, seed=42):
 
     np.random.seed(seed)
     wave = np.linspace(0, n_periods, N) % 1
-    wave -= wave.mean()
-    wave = wave.reshape(1, N)
-
-    return wave
-
-
-def filtered_saw_tooth_wave(N=20000, n_periods=10, seed=42):
-    # Create a saw tooth wave with n_periods peaks
-    # and N samples
-
-    wave = saw_tooth_wave(N, n_periods, seed).flatten()
-    wave = butter_lowpass_filter(wave, 2.5, (N // n_periods), order=3)
     wave -= wave.mean()
     wave = wave.reshape(1, N)
 
@@ -66,12 +26,10 @@ def sample_ica_data(N=20000, n_electrodes=6, seed=42):
 
     noise = np.random.normal(0, 0.025, size=(1, N))
 
-    saw_tooth = filtered_saw_tooth_wave(N=N, n_periods=10, seed=seed)
-
     sources = np.concatenate(
         [
             noise,
-            # saw_tooth,
+            # saw_tooth = filtered_saw_tooth_wave(N=N, n_periods=10, seed=seed),
             artifact.reshape(1, N) * np.sin(np.linspace(0, 500, N)).reshape(1, N),
             np.sin(np.linspace(0, 400, N)).reshape(1, N) / 5,
             np.sin(np.linspace(0, 10, N) ** 2).reshape(1, N) / 5,
