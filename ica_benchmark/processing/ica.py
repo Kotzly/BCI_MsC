@@ -29,8 +29,9 @@ def _get_kwargs(m, is_extended=None):
 
 _ica_kwargs_dict = {
     "fastica": _get_kwargs("fastica"),
-    "infomax": _get_kwargs("infomax"),
+    "infomax": _get_kwargs("infomax", is_extended=False),
     "picard": _get_kwargs("picard", is_extended=False),
+    "ext_picard": _get_kwargs("picard", is_extended=True),
     "ext_infomax": _get_kwargs("infomax", is_extended=True),
     "picard_o": dict(method="picard", fit_params=dict(extended=True, ortho=True)),
     "whitening": _get_kwargs("whitening"),
@@ -39,10 +40,14 @@ _ica_kwargs_dict = {
 
 
 _coro_kwargs_dict = {
-    "sobi_coro": dict(partitionsize=int(10 ** 6), timelags=list(range(1, 101))),  # [TODO] resolve nan issue
+    "sobi_coro": dict(
+        partitionsize=int(10**6), timelags=list(range(1, 101))
+    ),  # [TODO] resolve nan issue
     "choi_var": dict(),
     "choi_vartd": dict(timelags=[1, 2, 3, 4, 5]),  # [TODO] resolve nan issue
-    "choi_td": dict(instantcov=False, timelags=[1, 2, 3, 4, 5]),  # [TODO] resolve nan issue
+    "choi_td": dict(
+        instantcov=False, timelags=[1, 2, 3, 4, 5]
+    ),  # [TODO] resolve nan issue
     "coro": dict(),  # [TODO] resolve nan issue
 }
 
@@ -65,7 +70,7 @@ _all_methods = list(
         **_coro_kwargs_dict,
         **_jade_kwargs_dict,
         **_sobi_kwargs_dict,
-        **_orica_kwargs_dict
+        **_orica_kwargs_dict,
     }
 )
 
@@ -84,11 +89,10 @@ def create_gdf_obj(arr):
 
 
 class CustomICA(ICA):
-    
     def fit_transform(self, X, y=None):
         self.fit(X)
         return self.transform(X)
-        
+
     def transform(self, X, copy=True):
         if copy:
             X = X.copy()
@@ -168,6 +172,7 @@ class CustomICA(ICA):
         sel = slice(0, self.n_components_)
         if self.method == "fastica":
             from sklearn.decomposition import FastICA
+
             ica = FastICA(whiten=False, random_state=random_state, **self.fit_params)
             ica.fit(data[:, sel])
             self.unmixing_matrix_ = ica.components_
@@ -184,6 +189,7 @@ class CustomICA(ICA):
             del unmixing_matrix, n_iter
         elif self.method == "picard":
             from picard import picard
+
             _, W, _, n_iter = picard(
                 data[:, sel].T,
                 whiten=False,
@@ -255,10 +261,14 @@ def get_all_methods():
 
 def get_ica_instance(method, n_components=None, **kwargs):
     if method in _ica_kwargs_dict:
-        return CustomICA(n_components=n_components, **_ica_kwargs_dict[method], **kwargs)
+        return CustomICA(
+            n_components=n_components, **_ica_kwargs_dict[method], **kwargs
+        )
     elif method in _orica_kwargs_dict:
         kwargs.pop("random_state")
-        return CBEB_ORICA(n_components=n_components, **_orica_kwargs_dict[method], **kwargs)
+        return CBEB_ORICA(
+            n_components=n_components, **_orica_kwargs_dict[method], **kwargs
+        )
     return CustomICA(n_components, method=method, **kwargs)
 
 
