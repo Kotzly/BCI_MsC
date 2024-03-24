@@ -463,7 +463,7 @@ class Splitter:
         split_fn = split_fn_dict[mode]
         return split_fn()
 
-    def load_from_splits(self, splits, fold_sizes=None):
+    def load_from_splits(self, splits: Split, fold_sizes=None):
         fold_sizes = fold_sizes or self.fold_sizes
         splits_epochs = [
             split.load_epochs(self.dataset, **self.load_kwargs) for split in splits
