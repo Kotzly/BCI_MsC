@@ -51,8 +51,8 @@ _coro_kwargs_dict = {
     "coro": dict(),  # [TODO] resolve nan issue
 }
 
-
-_jade_kwargs_dict = {"jade": dict()}
+# MNE already centers data using the PCA
+_jade_kwargs_dict = {"jade": dict(apply_pca=False)}
 
 
 _sobi_kwargs_dict = {"sobi": dict(lags=100)}

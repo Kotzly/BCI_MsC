@@ -63,7 +63,7 @@ from numpy import (
 from numpy.linalg import eig, pinv
 
 
-def jadeR(X, n_components=None):
+def jadeR(X, n_components=None, apply_pca=True):
     """
     Blind separation of real signals with JADE.
 
@@ -148,32 +148,35 @@ def jadeR(X, n_components=None):
 
     X -= X.mean(1)
 
-    # whitening & projection onto signal subspace
-    # -------------------------------------------
+    if apply_pca:
+        # whitening & projection onto signal subspace
+        # -------------------------------------------
 
-    # An eigen basis for the sample covariance matrix
-    [D, U] = eig((X * X.T) / float(T))
-    # Sort by increasing variances
-    k = D.argsort()
-    Ds = D[k]
+        # An eigen basis for the sample covariance matrix
+        [D, U] = eig((X * X.T) / float(T))
+        # Sort by increasing variances
+        k = D.argsort()
+        Ds = D[k]
 
-    # The m most significant princip. comp. by decreasing variance
-    PCs = arange(n - 1, n - m - 1, -1)
+        # The m most significant princip. comp. by decreasing variance
+        PCs = arange(n - 1, n - m - 1, -1)
 
-    # PCA
-    # At this stage, B does the PCA on m components
-    B = U[:, k[PCs]].T
+        # PCA
+        # At this stage, B does the PCA on m components
+        B = U[:, k[PCs]].T
 
-    # --- Scaling ---------------------------------
-    # The scales of the principal components
-    scales = sqrt(Ds[PCs])
-    B = diag(1.0 / scales) * B
-    # Sphering
-    X = B * X
+        # --- Scaling ---------------------------------
+        # The scales of the principal components
+        scales = sqrt(Ds[PCs])
+        B = diag(1.0 / scales) * B
+        # Sphering
+        X = B * X
 
-    # We have done the easy part: B is a whitening matrix and X is white.
+        # We have done the easy part: B is a whitening matrix and X is white.
 
-    del U, D, Ds, k, PCs, scales
+        del U, D, Ds, k, PCs, scales
+    else:
+        B = matrix(eye(n, dtype=float64))
 
     # NOTE: At this stage, X is a PCA analysis in m components of the real
     # data, except that all its entries now have unit variance. Any further
@@ -343,6 +346,7 @@ def jadeR(X, n_components=None):
     B = (
         diag(signs) * B
     )  # [[ 0.17242566  0.10485568 -0.7373937 ] [ 0.41923305  0.84589716 -1.41050008] [ 1.12505903 -2.42824508  0.92226197]]
+    B = array(B)
     return B, updates
 
     # Revision history of MATLAB code:
@@ -484,13 +488,16 @@ def jadeR(X, n_components=None):
 
 
 class JadeICA:
-    def __init__(self, n_components=None):
+    def __init__(self, n_components=None, apply_pca=True):
         self.n_components = n_components
+        self.apply_pca = apply_pca
 
     def fit(self, x):
         if self.n_components is None:
             self.n_components = x.shape[0]
-        self.B, self.n_iter = jadeR(x, n_components=self.n_components)
+        self.B, self.n_iter = jadeR(
+            x, n_components=self.n_components, apply_pca=self.apply_pca
+        )
 
     def transform(self, x):
         Y = dot(self.B, x)
