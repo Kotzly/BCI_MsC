@@ -84,7 +84,8 @@ class Dataset(ABC):
         tmax=0.7,
         reject=None,
         load_eog=False,
-        verbose=None
+        verbose=None,
+        raw_fn=None
     ):
         # Default value of MNE is to not reject but default from
         # this class is using the REJECT_MAGNITUDE dict
@@ -97,6 +98,11 @@ class Dataset(ABC):
         raw_obj = cls.load_as_raw(
             filepath, preload=False, load_eog=load_eog, verbose=verbose
         )
+
+        # Option to transform raw before turning it into epochs
+        if raw_fn is not None:
+            raw_obj = raw_fn(raw_obj)
+
         events, _ = events_from_annotations(
             raw_obj,
             event_id=cls.EVENT_MAP_DICT,

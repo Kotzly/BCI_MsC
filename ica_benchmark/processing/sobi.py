@@ -8,7 +8,6 @@ from sklearn.base import TransformerMixin, BaseEstimator
 
 
 def center(X, mean=None):
-
     """
     Function to center the data using empirical mean to have each variable with zero mean.
 
@@ -27,7 +26,6 @@ def center(X, mean=None):
 
 
 def time_lagged_autocov(X, lags):
-
     """
     Computes the auto-covariance tensor, containing all lagged-autocovariance with lag from 0 (covariance) to lags
 
@@ -48,7 +46,7 @@ def time_lagged_autocov(X, lags):
     X0 = center(X[:, :L])
 
     for k in range(lags):
-        Xk = center(X[:, k:k + L])
+        Xk = center(X[:, k : k + L])
         R[k] = (1.0 / L) * (X0.dot(Xk.T))
         R[k] = 0.5 * (R[k] + R[k].T)
 
@@ -56,7 +54,6 @@ def time_lagged_autocov(X, lags):
 
 
 def whitening(X):
-
     """
     Function that withens the data.
 
@@ -79,7 +76,6 @@ def whitening(X):
 
 
 def off_frobenius(M):
-
     """
     Computes the square Frobenius norm of the matrix M-diag(M)
 
@@ -92,11 +88,13 @@ def off_frobenius(M):
 
     """
 
-    return (np.linalg.norm(np.tril(M, k=-1), ord='fro')**2 + np.linalg.norm(np.triu(M, k=1), ord='fro')**2)
+    return (
+        np.linalg.norm(np.tril(M, k=-1), ord="fro") ** 2
+        + np.linalg.norm(np.triu(M, k=1), ord="fro") ** 2
+    )
 
 
 def rotation(M):
-
     """
     This function infers Jacobi rotation matrix R used in the joint diagonalization of a set of matrices
 
@@ -111,14 +109,18 @@ def rotation(M):
 
     """
 
-    h = np.array([M[:, 0, 0] - M[:, 1, 1],
-                  M[:, 1, 0] + M[:, 0, 1],
-                  1j * (M[:, 1, 0] - M[:, 0, 1])]).T
+    h = np.array(
+        [
+            M[:, 0, 0] - M[:, 1, 1],
+            M[:, 1, 0] + M[:, 0, 1],
+            1j * (M[:, 1, 0] - M[:, 0, 1]),
+        ]
+    ).T
     G = np.real(h.T.dot(h))
     [eigvals, v] = np.linalg.eigh(G)
     [x, y, z] = np.sign(v[0, -1]) * v[:, -1]
 
-    r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
+    r = np.sqrt(x**2 + y**2 + z**2)
     c = np.sqrt((x + r) / (2 * r))
     s = (y - 1j * z) / np.sqrt(2 * r * (x + r))
 
@@ -128,7 +130,6 @@ def rotation(M):
 
 
 def joint_diagonalization(C, V=None, eps=1e-3, max_iter=1000, verbose=-1):
-
     """
     Joint diagonalization of a set of matrices C
 
@@ -154,15 +155,15 @@ def joint_diagonalization(C, V=None, eps=1e-3, max_iter=1000, verbose=-1):
     counter = 0
 
     if verbose > 0:
-        print('Iter: {:.0f}, Diagonalization: {:.2f}'.format(counter, O_cs))
+        print("Iter: {:.0f}, Diagonalization: {:.2f}".format(counter, O_cs))
 
     diff = np.inf
 
-    while ((diff > eps) and (counter < max_iter)):
+    while (diff > eps) and (counter < max_iter):
         counter += 1
-        for (i, j) in list_pairs:
+        for i, j in list_pairs:
             V_ = np.eye(d) + 1j * np.zeros((d, d))
-            idx = (slice(None), ) + np.ix_([i, j], [i, j])
+            idx = (slice(None),) + np.ix_([i, j], [i, j])
             R = rotation(C[idx])
             V_[np.ix_([i, j], [i, j])] = V_[np.ix_([i, j], [i, j])].dot(R)
             V = V.dot(V_.T)
@@ -172,14 +173,15 @@ def joint_diagonalization(C, V=None, eps=1e-3, max_iter=1000, verbose=-1):
         diff = np.abs(O_cs - O_cs_new)
 
         if verbose > 0:
-            print('Iter: {:.0f}, Diagonalization: {:.2f}'.format(counter, O_cs))
+            print("Iter: {:.0f}, Diagonalization: {:.2f}".format(counter, O_cs))
         O_cs = O_cs_new
 
+    # Only for real signals, unmixing matrix is real
+    V = np.real(V)
     return V, C, counter
 
 
 class SOBI(TransformerMixin, BaseEstimator):
-
     """
 
     Linear ICA for time series data using joint diagonalization of the lagged-autocovariance matrices
@@ -195,7 +197,6 @@ class SOBI(TransformerMixin, BaseEstimator):
         self.counter = 0
 
     def fit(self, X):
-
         """
 
         Attributes:
@@ -208,14 +209,15 @@ class SOBI(TransformerMixin, BaseEstimator):
 
         X_white, U, d = whitening(X.T)
         C = time_lagged_autocov(X_white, self.lags)
-        C = C + 1J * np.zeros_like(C)
-        V, C, self.counter = joint_diagonalization(C, eps=self.eps, max_iter=self.max_iter)
+        C = C + 1j * np.zeros_like(C)
+        V, C, self.counter = joint_diagonalization(
+            C, eps=self.eps, max_iter=self.max_iter
+        )
         self.W = (V.T).dot((U / d).T)
 
         self.is_fitted_ = True
 
     def transform(self, X):
-
         """
 
         Attributes:
@@ -226,11 +228,10 @@ class SOBI(TransformerMixin, BaseEstimator):
 
         """
 
-        check_is_fitted(self, 'is_fitted_')
-        return np.real(X.dot(self.W.T))
+        check_is_fitted(self, "is_fitted_")
+        return X.dot(self.W.T)
 
     def fit_transform(self, X):
-
         """
 
         Attributes:
