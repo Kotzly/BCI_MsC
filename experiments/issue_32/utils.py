@@ -170,18 +170,18 @@ def get_classifier(clf_method, random_state=1):
         clf = LinearDiscriminantAnalysis(n_components=1, solver="svd")
         param_grid = dict(n_components=[1, 2, 3])
     elif clf_method == "svm_rbf":
-        clf = SVC(kernel="rbf", random_state=random_state)
+        clf = SVC(kernel="rbf", random_state=random_state, C=0.1)
         param_grid = dict(C=np.logspace(-1, 3, 6), gamma=np.logspace(-1, -3, 5))
     elif clf_method == "svm_linear":
-        clf = SVC(kernel="linear", random_state=random_state)
+        clf = SVC(kernel="linear", random_state=random_state, C=0.1)
         param_grid = dict(C=np.logspace(-2, 3, 10))
     elif clf_method == "svm_poly":
-        clf = SVC(kernel="poly", random_state=random_state)
+        clf = SVC(kernel="poly", random_state=random_state, C=0.1)
         param_grid = dict(
             C=np.logspace(-1, 3, 6), gamma=np.logspace(-1, -3, 4), degree=[2, 3]
         )
     elif clf_method == "svm_sigmoid":
-        clf = SVC(kernel="sigmoid", C=1, random_state=random_state)
+        clf = SVC(kernel="sigmoid", random_state=random_state, C=0.1)
         param_grid = dict(C=np.logspace(-1, 3, 6), gamma=np.logspace(-1, -3, 6))
     elif clf_method == "knn":
         clf = KNeighborsClassifier()
@@ -189,42 +189,55 @@ def get_classifier(clf_method, random_state=1):
             n_neighbors=[2, 4, 6, 8, 10], weights=["uniform", "distance11"]
         )
     elif clf_method == "random_forest":
-        clf = RandomForestClassifier(random_state=random_state)
+        clf = RandomForestClassifier(
+            random_state=random_state, n_estimators=10, max_depth=2
+        )
         param_grid = dict(
             n_estimators=[10, 15, 25, 40],
             max_features=["sqrt", "log2"],
             max_depth=[2, 3],
         )
     elif clf_method == "extra_trees":
-        clf = ExtraTreesClassifier(random_state=random_state)
+        clf = ExtraTreesClassifier(
+            random_state=random_state, n_estimators=10, max_depth=2
+        )
         param_grid = dict(n_estimators=[10, 20, 30, 40], max_depth=[2, 3, 5])
     elif clf_method == "gaussian_nb":
         clf = GaussianNB()
         param_grid = dict()
     elif clf_method == "mlp":
         clf = MLPClassifier(
-            random_state=random_state, max_iter=5000, validation_fraction=0.25
+            random_state=random_state,
+            max_iter=500,
+            validation_fraction=0.3,
+            early_stopping=True,
+            solver="adam",
+            learning_rate_init=0.001,
+            n_iter_no_change=50,
+            tol=1e-3,
+            hidden_layer_sizes=(8,),
+            activation="relu",
         )
         param_grid = dict(
+            max_iter=[1000],
             hidden_layer_sizes=[
                 (),
                 (10,),
                 (6,),
                 (4,),
-                (10, 6),
                 (6, 4),
                 (4, 4),
             ],
-            activation=["relu", "logistic"],
+            activation=["relu"],
             # solver=["adam", "sgd"],
         )
     elif clf_method == "logistic_l2":
-        clf = LogisticRegression(random_state=random_state, max_iter=3000)
+        clf = LogisticRegression(random_state=random_state, max_iter=3000, C=0.1)
         param_grid = dict(
             C=np.logspace(-2, 3, 20), penalty=["l2"], fit_intercept=[True]
         )
     elif clf_method == "logistic_l1":
-        clf = LogisticRegression(random_state=random_state, max_iter=3000)
+        clf = LogisticRegression(random_state=random_state, max_iter=3000, C=0.1)
         param_grid = dict(
             C=np.logspace(-2, 3, 20),
             penalty=["l1"],
